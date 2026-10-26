@@ -1,0 +1,211 @@
+/* AIOS HUD — selectable styles. Layout stays identical; tokens and surface treatment change.
+   Default (no data-theme) = "arc" = the values in hud.css :root.
+   Token roles: --cyan = primary accent, --red = question/alarm, --gold = approval/warning. */
+
+/* ============ 2 · MARK III — armour gold on crimson-black ============ */
+:root[data-theme="mark3"] {
+  --a-rgb: 255, 196, 64; --r-rgb: 255, 72, 56; --g-rgb: 120, 214, 255; --idle-rgb: 203, 166, 139; --o-rgb: 255, 140, 45;
+  --bg: #0b0504; --bg-glow: #33110b;
+  --glass: rgba(38, 13, 10, .68); --glass-2: rgba(54, 18, 12, .78);
+  --txt: #fff0dc; --sec: #cba68b; --dim: #80604e;
+  --line: rgba(var(--a-rgb), .32); --line-strong: rgba(var(--a-rgb), .7);
+  --cut: 24px; --scan-o: .6;
+  --node-h: 42; --node-spread: .55; --node-sat: 95%;
+  --f-head: 'Chakra Petch', 'Segoe UI', sans-serif;
+  --c-claude: #ffb48a; --c-codex: #e0c8ff; --c-ollama: #a8f0c8;
+}
+:root[data-theme="mark3"] .panel::before { width: 30px; height: 30px; border-width: 3px; }
+:root[data-theme="mark3"] .eyebrow { letter-spacing: .2em; }
+:root[data-theme="mark3"] .panel { box-shadow: inset 0 0 40px rgba(255, 72, 56, .06); }
+
+/* ============ 3 · GHOST — quiet monochrome, hairlines ============ */
+:root[data-theme="ghost"] {
+  --a-rgb: 226, 236, 246; --r-rgb: 255, 94, 94; --g-rgb: 255, 198, 94; --idle-rgb: 141, 153, 166; --o-rgb: 255, 150, 90;
+  --bg: #06080b; --bg-glow: #10151b;
+  --glass: rgba(13, 17, 22, .72); --glass-2: rgba(17, 22, 28, .8);
+  --txt: #eef3f8; --sec: #8d99a6; --dim: #586372;
+  --line: rgba(var(--a-rgb), .12); --line-strong: rgba(var(--a-rgb), .4);
+  --cut: 0px; --scan-o: 0; --grid-op: .018;
+  --node-h: 212; --node-spread: .12; --node-sat: 22%;
+  --f-head: 'Space Grotesk', 'Segoe UI', sans-serif; --f-body: 'Space Grotesk', 'Segoe UI', sans-serif; --f-mono: 'IBM Plex Mono', Consolas, monospace;
+  --c-claude: #e9b99a; --c-codex: #b9b4e8; --c-ollama: #9ed6bb;
+}
+:root[data-theme="ghost"] .panel { border-radius: 3px; backdrop-filter: blur(14px); }
+:root[data-theme="ghost"] .panel::before { display: none; }
+:root[data-theme="ghost"] .eyebrow { letter-spacing: .12em; color: var(--sec); }
+:root[data-theme="ghost"] .brand { letter-spacing: .2em; }
+:root[data-theme="ghost"] .tabs a { letter-spacing: .06em; font-weight: 500; text-transform: none; font-size: 14px; }
+:root[data-theme="ghost"] .row .nm { letter-spacing: .04em; font-size: 15px; }
+:root[data-theme="ghost"] .btn { letter-spacing: .08em; border-radius: 2px; }
+:root[data-theme="ghost"] .tl-lane .lb { letter-spacing: .08em; }
+:root[data-theme="ghost"] .meter i, :root[data-theme="ghost"] .dot.running { box-shadow: none; }
+
+/* ============ 4 · BLUEPRINT — drafting paper, white linework ============ */
+:root[data-theme="blueprint"] {
+  --a-rgb: 235, 244, 255; --r-rgb: 255, 125, 112; --g-rgb: 255, 214, 102; --idle-rgb: 157, 184, 224; --o-rgb: 255, 165, 90;
+  --bg: #0a2552; --bg-glow: #14438f;
+  --glass: rgba(8, 36, 88, .55); --glass-2: rgba(10, 44, 104, .7);
+  --txt: #eaf3ff; --sec: #a3bde6; --dim: #6f90c6;
+  --line: rgba(var(--a-rgb), .26); --line-strong: rgba(var(--a-rgb), .7);
+  --cut: 0px; --scan-o: 0; --grid-op: .07;
+  --node-h: 205; --node-spread: .2; --node-sat: 75%;
+  --f-head: 'IBM Plex Mono', Consolas, monospace; --f-body: 'IBM Plex Mono', Consolas, monospace; --f-mono: 'IBM Plex Mono', Consolas, monospace;
+  --c-claude: #ffc9a8; --c-codex: #d6ccff; --c-ollama: #b5f5d8;
+}
+:root[data-theme="blueprint"] body::before { background-size: 24px 24px; }
+:root[data-theme="blueprint"] .panel { border-color: var(--line-strong); }
+:root[data-theme="blueprint"] .panel::before { display: none; }
+:root[data-theme="blueprint"] .panel-h { border-bottom: 1px dashed var(--line); margin-bottom: var(--sp-2); }
+:root[data-theme="blueprint"] .eyebrow::before { content: '§ '; opacity: .7; }
+:root[data-theme="blueprint"] .eyebrow { letter-spacing: .16em; }
+:root[data-theme="blueprint"] .row, :root[data-theme="blueprint"] .msg { border-bottom-style: dashed; }
+:root[data-theme="blueprint"] .row .nm { letter-spacing: .04em; font-size: 14px; }
+:root[data-theme="blueprint"] .tabs a { letter-spacing: .08em; }
+:root[data-theme="blueprint"] .brand { font-size: 20px; }
+:root[data-theme="blueprint"] .meter i, :root[data-theme="blueprint"] .dot.running { box-shadow: none; }
+
+/* ============ 5 · PHOSPHOR — green CRT terminal ============ */
+:root[data-theme="phosphor"] {
+  --a-rgb: 72, 255, 128; --r-rgb: 255, 72, 60; --g-rgb: 255, 176, 0; --idle-rgb: 98, 181, 125; --o-rgb: 255, 122, 24;
+  --bg: #010402; --bg-glow: #06210f;
+  --glass: rgba(2, 16, 7, .72); --glass-2: rgba(4, 26, 11, .8);
+  --txt: #c4ffd4; --sec: #62b57d; --dim: #2f6e47;
+  --cut: 0px; --scan-c: rgba(0, 0, 0, .32); --grid-op: .05;
+  --node-h: 135; --node-spread: .35; --node-sat: 90%;
+  --f-head: 'Share Tech Mono', Consolas, monospace; --f-body: 'Share Tech Mono', Consolas, monospace; --f-mono: 'Share Tech Mono', Consolas, monospace;
+  --c-claude: #ffb000; --c-codex: #5fe3ff; --c-ollama: #b8ff6a;
+}
+:root[data-theme="phosphor"] body { text-shadow: 0 0 5px rgba(var(--a-rgb), .35); }
+:root[data-theme="phosphor"] .panel::before { width: 10px; height: 10px; }
+:root[data-theme="phosphor"] .eyebrow::before { content: '> '; }
+:root[data-theme="phosphor"] .btn { border-color: transparent; padding: 7px 4px; }
+:root[data-theme="phosphor"] .btn::before { content: '[ '; }
+:root[data-theme="phosphor"] .btn::after { content: ' ]'; }
+:root[data-theme="phosphor"] .btn:hover { box-shadow: none; text-shadow: 0 0 8px var(--cyan); }
+:root[data-theme="phosphor"] .row .nm, :root[data-theme="phosphor"] .msg .who { letter-spacing: .08em; font-size: 15px; }
+:root[data-theme="phosphor"] .tabs a { letter-spacing: .1em; }
+:root[data-theme="phosphor"] .brand { font-size: 20px; }
+
+/* ============ 6 · KATSUMII — "Living Data" (tokens and components from src/styles/v6.css, repo FredMorbe/katsumii) ============
+   Left out on purpose: WebGL particle stage, light theme. The site has no red, so: question = rose (#fb7185, X25V --rose),
+   approval = yellow (#facc15, the "Challenge" accent). */
+:root[data-theme="katsumii"] {
+  --a-rgb: 34, 211, 238; --r-rgb: 251, 113, 133; --g-rgb: 250, 204, 21; --idle-rgb: 148, 163, 184; --o-rgb: 255, 120, 71;
+  --bg: #070d16; --bg-glow: #070d16;
+  --glass: rgba(30, 41, 59, .42); --glass-2: rgba(30, 41, 59, .62);
+  --txt: #eef2f7; --sec: #94a3b8; --dim: #64748b;
+  --line: rgba(226, 232, 240, .08); --line-strong: rgba(var(--a-rgb), .3);
+  --cut: 0px; --scan-o: 0; --grid-op: 0;
+  --node-h: 190; --node-spread: 1.25; --node-sat: 80%;
+  --f-head: 'DM Sans', 'Manrope', sans-serif; --f-body: 'Manrope', 'Segoe UI', sans-serif; --f-mono: 'DM Mono', ui-monospace, monospace;
+}
+:root[data-theme="katsumii"] body {
+  background:
+    radial-gradient(ellipse 85% 55% at 65% -8%, rgba(var(--a-rgb), .12), transparent 62%),
+    radial-gradient(ellipse 55% 45% at 6% 42%, rgba(var(--a-rgb), .05), transparent 60%),
+    var(--bg);
+}
+:root[data-theme="katsumii"] body::before { /* .v6-noise */
+  z-index: 2; opacity: .05; filter: brightness(1.6); background-size: auto;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-theme="katsumii"] a:focus-visible, :root[data-theme="katsumii"] button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+
+/* .v6-card */
+:root[data-theme="katsumii"] .panel {
+  clip-path: none; border-radius: 16px; overflow: hidden;
+  background: linear-gradient(165deg, rgba(30, 41, 59, .42), rgba(13, 22, 38, .24));
+  transition: border-color .35s ease;
+}
+:root[data-theme="katsumii"] .panel:hover { border-color: var(--line-strong); }
+:root[data-theme="katsumii"] .panel::before { display: none; }
+
+/* .v6-nav.scrolled + .v6-brand + .v6-nav-links */
+:root[data-theme="katsumii"] .top { background: rgba(7, 13, 22, .72); backdrop-filter: blur(14px); }
+:root[data-theme="katsumii"] .brand { font: 700 20px/1 var(--f-head); letter-spacing: .01em; }
+:root[data-theme="katsumii"] .brand::after { content: '.'; color: #ff7847; margin-left: -8px; }
+:root[data-theme="katsumii"] .tabs a { font: 400 12px/1 var(--f-mono); letter-spacing: .14em; border-bottom: 0; transition: color .25s ease; }
+:root[data-theme="katsumii"] .tabs a:hover { color: #67e8f9; background: none; }
+:root[data-theme="katsumii"] .tabs a.on { color: var(--cyan); }
+
+/* .v6-eyebrow */
+:root[data-theme="katsumii"] .eyebrow { display: inline-flex; align-items: center; gap: .6rem; font: 400 11px/1 var(--f-mono); letter-spacing: .2em; }
+:root[data-theme="katsumii"] .eyebrow::before { content: ''; width: 22px; height: 1px; background: var(--cyan); opacity: .7; }
+
+/* .v6-btn (filled) / .v6-theme (outlined pill) */
+:root[data-theme="katsumii"] .btn { border-radius: 999px; font: 700 12px/1 var(--f-head); letter-spacing: .01em; text-transform: none; padding: 9px 16px; color: var(--sec); border-color: var(--line); transition: color .25s, border-color .25s, background-color .25s, box-shadow .25s; }
+:root[data-theme="katsumii"] .btn:hover { color: var(--cyan); border-color: var(--line-strong); background: none; box-shadow: none; }
+:root[data-theme="katsumii"] .btn:active { background: rgba(var(--a-rgb), .15); color: var(--cyan); }
+:root[data-theme="katsumii"] .btn.red { color: var(--red); border-color: rgba(var(--r-rgb), .45); }
+:root[data-theme="katsumii"] .btn.red:hover { background: var(--red-dim); border-color: var(--red); }
+:root[data-theme="katsumii"] .btn.gold { color: var(--gold); border-color: rgba(var(--g-rgb), .45); }
+:root[data-theme="katsumii"] .btn.gold:hover { background: var(--gold-dim); border-color: var(--gold); }
+:root[data-theme="katsumii"] .btn.orange { color: var(--orange); border-color: rgba(var(--o-rgb), .45); }
+:root[data-theme="katsumii"] .btn.orange:hover { background: var(--orange-dim); border-color: var(--orange); }
+:root[data-theme="katsumii"] .btn.solid { background: var(--cyan); color: #031820; border-color: transparent; }
+:root[data-theme="katsumii"] .btn.solid:hover, :root[data-theme="katsumii"] .btn.solid:active { background: #67e8f9; color: #031820; box-shadow: 0 8px 34px -8px rgba(var(--a-rgb), .5); }
+
+/* .v6-card-chips li */
+:root[data-theme="katsumii"] .chip { font-size: 10px; letter-spacing: .1em; border-radius: 999px; padding: 3px 9px; }
+:root[data-theme="katsumii"] .chip.cyan { background: none; border-color: var(--line-strong); }
+:root[data-theme="katsumii"] .badge { border-radius: 999px; padding-inline: 8px; }
+
+/* .v6-card h3, display type */
+:root[data-theme="katsumii"] .row .nm, :root[data-theme="katsumii"] .msg .who { font: 700 15px/1.1 var(--f-head); letter-spacing: -.01em; }
+:root[data-theme="katsumii"] .row.sel { box-shadow: none; background: rgba(var(--a-rgb), .08); }
+:root[data-theme="katsumii"] .tree .t { letter-spacing: -.01em; }
+:root[data-theme="katsumii"] .filter, :root[data-theme="katsumii"] .comm { font: 400 12px/1 var(--f-mono); letter-spacing: .14em; }
+:root[data-theme="katsumii"] .tl-lane .lb { font-family: var(--f-mono); letter-spacing: .12em; font-weight: 400; }
+:root[data-theme="katsumii"] .stat div, :root[data-theme="katsumii"] .clock { letter-spacing: -.03em; font-weight: 700; }
+:root[data-theme="katsumii"] .input { border-radius: 10px; }
+:root[data-theme="katsumii"] .run { border-radius: 4px; }
+:root[data-theme="katsumii"] .dot { transform: none; border-radius: 50%; }
+:root[data-theme="katsumii"] .meter, :root[data-theme="katsumii"] .meter i { border-radius: 4px; }
+:root[data-theme="katsumii"] .theme-pick, :root[data-theme="katsumii"] .theme-pick button { border-radius: 999px; }
+
+/* ============ 7 · X25V — frosted glass + amber accent (D:\X25V src-v2/style.css) ============
+   bg #070d16, glass rgba(255,255,255,.04) + blur(20px) saturate(160%), accent amber #fbbf24, neg #f87171,
+   Inter, radii 16 panels / 10 controls, accent blobs in the background. Approval = indigo (brand Indigo). */
+:root[data-theme="x25v"] {
+  --a-rgb: 251, 191, 36; --r-rgb: 248, 113, 113; --g-rgb: 129, 140, 248; --idle-rgb: 148, 163, 184; --o-rgb: 255, 120, 71;
+  --bg: #070d16; --bg-glow: #0b1322;
+  --glass: rgba(255, 255, 255, .04); --glass-2: rgba(255, 255, 255, .07);
+  --txt: #eef2f7; --sec: #94a3b8; --dim: #64748b;
+  --line: rgba(226, 232, 240, .08); --line-strong: rgba(var(--a-rgb), .25);
+  --cut: 0px; --scan-o: 0; --grid-op: 0;
+  --node-h: 40; --node-spread: .6; --node-sat: 92%;
+  --f-head: 'Inter', system-ui, sans-serif; --f-body: 'Inter', system-ui, sans-serif; --f-mono: 'Inter', system-ui, sans-serif;
+}
+:root[data-theme="x25v"] body {
+  font-variant-numeric: tabular-nums;
+  background:
+    radial-gradient(circle 520px at 12% 8%, rgba(var(--a-rgb), .11), transparent),
+    radial-gradient(circle 460px at 90% 92%, rgba(var(--a-rgb), .09), transparent),
+    var(--bg);
+}
+:root[data-theme="x25v"] .panel {
+  clip-path: none; border-radius: 16px; overflow: hidden; border-color: rgba(255, 255, 255, .10);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .2), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+:root[data-theme="x25v"] .panel::before { display: none; }
+:root[data-theme="x25v"] .top { background: none; border-bottom-color: rgba(255, 255, 255, .08); }
+:root[data-theme="x25v"] .brand { font: 700 20px/1 var(--f-head); letter-spacing: .02em; }
+:root[data-theme="x25v"] .eyebrow { font: 600 11px/1 var(--f-head); letter-spacing: .08em; color: var(--sec); }
+:root[data-theme="x25v"] .tabs a { font: 500 12px/1 var(--f-head); letter-spacing: 0; text-transform: none; border-bottom: 0; border-radius: 10px; border: 1px solid transparent; }
+:root[data-theme="x25v"] .tabs a.on { background: rgba(var(--a-rgb), .09); border-color: rgba(var(--a-rgb), .25); }
+:root[data-theme="x25v"] .btn { border-radius: 10px; font: 600 12px/1 var(--f-head); letter-spacing: 0; text-transform: none; padding: 8px 12px; }
+:root[data-theme="x25v"] .btn.solid { background: linear-gradient(var(--cyan), color-mix(in srgb, var(--cyan) 65%, black)); color: #000; border-color: transparent; }
+:root[data-theme="x25v"] .btn:active { background: var(--cyan); color: #000; }
+:root[data-theme="x25v"] .chip, :root[data-theme="x25v"] .badge { border-radius: 8px; letter-spacing: .04em; }
+:root[data-theme="x25v"] .input { border-radius: 10px; }
+:root[data-theme="x25v"] .row .nm, :root[data-theme="x25v"] .msg .who { font: 600 14px/1.1 var(--f-head); letter-spacing: 0; }
+:root[data-theme="x25v"] .row.sel { box-shadow: none; background: rgba(var(--a-rgb), .09); }
+:root[data-theme="x25v"] .row .nx, :root[data-theme="x25v"] .meta, :root[data-theme="x25v"] .limit .lbl, :root[data-theme="x25v"] .tree, :root[data-theme="x25v"] .table td { font-family: var(--f-body); }
+:root[data-theme="x25v"] .tl-lane .lb, :root[data-theme="x25v"] .tree .t { letter-spacing: 0; font-weight: 600; }
+:root[data-theme="x25v"] .stat div, :root[data-theme="x25v"] .clock { font-weight: 600; letter-spacing: 0; }
+:root[data-theme="x25v"] .run { border-radius: 4px; }
+:root[data-theme="x25v"] .dot { transform: none; border-radius: 50%; }
+:root[data-theme="x25v"] .meter, :root[data-theme="x25v"] .meter i { border-radius: 4px; }
+:root[data-theme="x25v"] .theme-pick { border-radius: 12px; }
+:root[data-theme="x25v"] .theme-pick button { border-radius: 8px; }

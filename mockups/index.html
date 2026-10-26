@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="hud.css">
+<link rel="stylesheet" href="themes.css">
+<script src="theme.js"></script>
+<style>
+  .main { grid-template-columns: 320px minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr) 252px; }
+  .p-agents { grid-column: 1; grid-row: 1; }
+  .p-stage  { grid-column: 2; grid-row: 1; padding: 0; }
+  .p-inbox  { grid-column: 3; grid-row: 1; }
+  .p-routines { grid-column: 1 / 3; grid-row: 2; }
+  .p-sub    { grid-column: 3; grid-row: 2; }
+  .stage { position: relative; flex: 1; min-height: 0; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .stage .ov { position: absolute; pointer-events: none; }
+  .ov.tl-corner { top: var(--sp-3); left: var(--sp-4); }
+  .ov.tr-corner { top: var(--sp-3); right: var(--sp-4); text-align: right; }
+  .ov.bl-corner { bottom: var(--sp-3); left: var(--sp-4); }
+  .ov.br-corner { bottom: var(--sp-3); right: var(--sp-4); }
+  .stat { display: flex; gap: var(--sp-4); margin-top: var(--sp-2); }
+  .stat div { font: 600 var(--fs-5)/1 var(--f-head); font-variant-numeric: tabular-nums; }
+  .stat small { display: block; margin-top: 3px; font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .1em; }
+  .legend { display: grid; gap: 6px; font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .06em; }
+  .legend i { display: inline-block; width: 22px; margin-right: var(--sp-2); vertical-align: middle; border-top: 1px solid var(--cyan); }
+  .legend i.dash { border-top-style: dashed; }
+  .legend .ag { display: inline-block; width: 8px; height: 8px; margin-right: 8px; transform: rotate(45deg); }
+  .tip { position: absolute; z-index: 5; padding: 6px 8px; font: 400 var(--fs-2)/1.4 var(--f-mono); background: rgba(4,10,16,.92); border: 1px solid var(--line-strong); pointer-events: none; white-space: nowrap; }
+  .tip b { color: var(--cyan); font-weight: 500; }
+  .feed { margin-top: var(--sp-2); font: 400 var(--fs-1)/1.6 var(--f-mono); color: var(--sec); max-width: 280px; }
+  .feed div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .feed div:first-child { color: var(--cyan); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="brand" href="index.html" aria-label="AIOS home">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="13" stroke-dasharray="3 3"/><circle cx="16" cy="16" r="8"/><path d="M16 3v5M16 24v5M3 16h5M24 16h5"/></svg>
+      AIOS
+    </a>
+    <nav class="tabs">
+      <a class="on" href="index.html">Command</a>
+      <a href="inbox.html">Inbox <b class="badge red">3</b></a>
+      <a href="agents.html">Agents</a>
+      <a href="memory.html">Memory</a>
+    </nav>
+    <div class="limits">
+      <div class="limit"><div class="lbl"><span>CLAUDE · 5H</span><b>38%</b></div><div class="meter" style="--v:38%"><i></i></div></div>
+      <div class="limit"><div class="lbl"><span>CLAUDE · 7D</span><b>13%</b></div><div class="meter" style="--v:13%"><i></i></div></div>
+      <div class="limit"><div class="lbl"><span>CODEX</span><b>n/a</b></div><div class="meter na"></div></div>
+    </div>
+    <div class="clock">09:47<span>MON 26 OCT</span></div>
+  </header>
+
+  <main class="main">
+    <!-- AGENTS -->
+    <section class="panel p-agents">
+      <div class="panel-h"><span class="eyebrow">Agents</span><span class="meta">6 · 2 RUNNING</span></div>
+      <div class="panel-b" style="padding:0">
+        <div class="row sel"><span class="dot running"></span><div><div class="nm">ATLAS <span class="chip claude">claude</span></div><div class="sub">Refactor auth module · 3 subagents</div></div><div class="nx">RUN #148<br>42m</div></div>
+        <div class="row"><span class="dot waiting"></span><div><div class="nm">FORGE <span class="chip codex">codex</span></div><div class="sub" style="color:var(--red)">Asks: Prisma or raw SQL?</div></div><div class="nx">WAITING<br>27m</div></div>
+        <div class="row"><span class="dot approval"></span><div><div class="nm">VAULT <span class="chip codex">codex</span></div><div class="sub" style="color:var(--gold)">Needs approval: delete cache</div></div><div class="nx">WAITING<br>17m</div></div>
+        <div class="row"><span class="dot running"></span><div><div class="nm">ECHO <span class="chip ollama">ollama</span></div><div class="sub">Summarize notes folder</div></div><div class="nx">RUN #61<br>27m</div></div>
+        <div class="row"><span class="dot"></span><div><div class="nm">SCRIBE <span class="chip claude">claude</span></div><div class="sub" style="color:var(--orange)">Brief done 07:20 · 2 sources failed</div></div><div class="nx">NEXT<br>18:00</div></div>
+        <div class="row"><span class="dot"></span><div><div class="nm">CONCIERGE <span class="chip claude">claude</span></div><div class="sub">Plan the day · done 08:42</div></div><div class="nx">NEXT<br>17:30</div></div>
+      </div>
+    </section>
+
+    <!-- CENTER: graphify memory + agent orbit -->
+    <section class="panel p-stage">
+      <div class="stage" id="stage">
+        <canvas id="graph" aria-label="Memory graph with orbiting agents"></canvas>
+        <div class="ov tl-corner">
+          <div class="eyebrow">Memory graph · graphify</div>
+          <div class="stat" id="stat"></div>
+        </div>
+        <div class="ov tr-corner">
+          <div class="eyebrow">Live memory access</div>
+          <div class="feed" id="feed"><div>—</div></div>
+        </div>
+        <div class="ov bl-corner">
+          <div class="legend">
+            <span><i></i>EXTRACTED edge</span>
+            <span><i class="dash"></i>INFERRED edge</span>
+          </div>
+        </div>
+        <div class="ov br-corner">
+          <div class="legend">
+            <span><b class="ag" style="background:var(--cyan)"></b>running</span>
+            <span><b class="ag" style="background:var(--red)"></b>waiting for answer</span>
+            <span><b class="ag" style="background:var(--gold)"></b>needs approval</span>
+            <span><b class="ag" style="background:#8fa9b6"></b>idle</span>
+          </div>
+        </div>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+    </section>
+
+    <!-- INBOX -->
+    <section class="panel p-inbox">
+      <div class="panel-h"><span class="eyebrow">Inbox</span><span class="meta">3 OPEN</span></div>
+      <div class="panel-b" style="padding:0">
+        <article class="msg q">
+          <div class="hd"><span class="chip red">Question</span><span class="who">FORGE</span><span class="ago">27m</span></div>
+          <p>Migration passes with both Prisma and raw SQL. Which one should I use for <span style="font-family:var(--f-mono)">orders</span>?</p>
+          <div class="acts"><button class="btn red">Prisma</button><button class="btn red">Raw SQL</button><button class="btn">Reply…</button></div>
+        </article>
+        <article class="msg a">
+          <div class="hd"><span class="chip gold">Approval</span><span class="who">VAULT</span><span class="ago">17m</span></div>
+          <p>Delete build cache <span style="font-family:var(--f-mono)">.next/</span> (214 MB) in <span style="font-family:var(--f-mono)">repo/aios-web</span>?</p>
+          <div class="acts"><button class="btn gold">Approve</button><button class="btn">Deny</button></div>
+        </article>
+        <article class="msg w">
+          <div class="hd"><span class="chip orange">Warning</span><span class="who">SCRIBE</span><span class="ago">2h</span></div>
+          <p>Daily brief ready, but 2 of 7 sources failed to load. 2 items relevant for AIOS.</p>
+          <div class="acts"><button class="btn">Open report</button></div>
+        </article>
+        <article class="msg read">
+          <div class="hd"><span class="chip cyan">Result</span><span class="who">CONCIERGE</span><span class="ago">1h</span></div>
+          <p>Day plan created: 3 focus blocks, 2 conflicts resolved.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ROUTINES -->
+    <section class="panel p-routines">
+      <div class="panel-h"><span class="eyebrow">Routines · today</span><span class="meta">12 SCHEDULED · 1 FAILED YESTERDAY</span></div>
+      <div class="panel-b">
+        <div class="tl">
+          <div class="tl-hours" id="hours"></div>
+          <div class="now" style="--l:calc(96px + (100% - 96px) * .4076)"></div>
+          <div class="tl-lane"><span class="lb">ATLAS</span><div class="tl-track"><i class="run" style="--l:25.7%;--w:5.6%"></i><i class="run live" style="--l:37.8%;--w:2.9%"></i><i class="run plan" style="--l:58.3%;--w:4.2%"></i></div></div>
+          <div class="tl-lane"><span class="lb">SCRIBE</span><div class="tl-track"><i class="run warn" style="--l:29.2%;--w:1.4%"></i><i class="run plan" style="--l:75%;--w:1%"></i></div></div>
+          <div class="tl-lane"><span class="lb">FORGE</span><div class="tl-track"><i class="run" style="--l:12.5%;--w:2.8%"></i><i class="run wait" style="--l:38.9%;--w:1.9%"></i></div></div>
+          <div class="tl-lane"><span class="lb">CONCIERGE</span><div class="tl-track"><i class="run" style="--l:35.4%;--w:.8%"></i><i class="run plan" style="--l:72.9%;--w:1%"></i></div></div>
+          <div class="tl-lane"><span class="lb">ECHO</span><div class="tl-track"><i class="run" style="--l:20.8%;--w:2.1%"></i><i class="run live" style="--l:38.9%;--w:1.9%"></i><i class="run plan" style="--l:50%;--w:2.1%"></i></div></div>
+          <div class="tl-lane"><span class="lb">VAULT</span><div class="tl-track"><i class="run fail" style="--l:10.4%;--w:1.9%"></i><i class="run appr" style="--l:39.6%;--w:1.2%"></i></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SUBAGENTS -->
+    <section class="panel p-sub">
+      <div class="panel-h"><span class="eyebrow">Subagents · ATLAS #148</span><span class="meta">184K TOK</span></div>
+      <div class="panel-b">
+        <div class="tree">
+          <ul>
+            <li>
+              <div class="n"><span class="dot running"></span><span class="t">ATLAS</span><span class="d">main</span><span class="st live">42m 10s</span></div>
+              <ul>
+                <li><div class="n"><span class="dot" style="background:var(--cyan)"></span><span class="t">Explore</span><span class="d">map auth call sites</span><span class="st">12s · 8.2k</span></div></li>
+                <li><div class="n"><span class="dot running"></span><span class="t">general-purpose</span><span class="d">rewrite token.js</span><span class="st live">41s · 22.1k</span></div>
+                  <ul><li><div class="n"><span class="dot" style="background:var(--cyan)"></span><span class="t">Explore</span><span class="d">usages of verify()</span><span class="st">6s · 3.4k</span></div></li></ul>
+                </li>
+                <li><div class="n"><span class="dot"></span><span class="t">Plan</span><span class="d">migration order</span><span class="st">queued</span></div></li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="mock-note">MOCKUP · FAKE DATA</div>
+
+<script src="graph.js"></script>
+<script>
+  // hour ticks for the routine timeline
+  const hours = document.getElementById('hours');
+  for (let h = 0; h <= 24; h += 2) hours.insertAdjacentHTML('beforeend', `<span style="left:${h / 24 * 100}%">${String(h).padStart(2, '0')}</span>`);
+
+  const feed = document.getElementById('feed'), lines = [];
+  const g = initGraph(document.getElementById('graph'), {
+    tooltip: document.getElementById('tip'),
+    onAccess(a, n) {
+      lines.unshift(`${a.name} → ${n.name}`); lines.length = Math.min(lines.length, 4);
+      feed.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+    },
+  });
+  const s = g.stats();
+  document.getElementById('stat').innerHTML =
+    `<div>${s.nodes}<small>NODES</small></div><div>${s.edges}<small>EDGES</small></div><div>${s.communities}<small>COMMUNITIES</small></div>`;
+</script>
+</body>
+</html>

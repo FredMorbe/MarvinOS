@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/hud.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .main { grid-template-columns: 320px minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr) 252px; }
+  .p-agents { grid-column: 1; grid-row: 1; }
+  .p-stage  { grid-column: 2; grid-row: 1; padding: 0; }
+  .p-inbox  { grid-column: 3; grid-row: 1; }
+  .p-routines { grid-column: 1 / 3; grid-row: 2; }
+  .p-sub    { grid-column: 3; grid-row: 2; }
+  .stage { position: relative; flex: 1; min-height: 0; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .stage .ov { position: absolute; pointer-events: none; }
+  .ov.tl-corner { top: var(--sp-3); left: var(--sp-4); }
+  .ov.tr-corner { top: var(--sp-3); right: var(--sp-4); text-align: right; }
+  .ov.bl-corner { bottom: var(--sp-3); left: var(--sp-4); }
+  .ov.br-corner { bottom: var(--sp-3); right: var(--sp-4); }
+  .stat { display: flex; gap: var(--sp-4); margin-top: var(--sp-2); }
+  .stat div { font: 600 var(--fs-5)/1 var(--f-head); font-variant-numeric: tabular-nums; }
+  .stat small { display: block; margin-top: 3px; font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .1em; }
+  .demo { margin-top: var(--sp-2); display: inline-block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+  .ov.center { inset: 0; display: grid; place-items: end center; padding-bottom: 18%; pointer-events: none; text-align: center; color: var(--sec); }
+  .ov.center .box { max-width: 360px; padding: var(--sp-3) var(--sp-4); background: rgba(7, 13, 22, .8); border: 1px solid var(--line); pointer-events: auto; font-size: var(--fs-2); }
+  .ov.center a { color: var(--cyan); }
+  .legend { display: grid; gap: 6px; font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .06em; }
+  .legend i { display: inline-block; width: 22px; margin-right: var(--sp-2); vertical-align: middle; border-top: 1px solid var(--cyan); }
+  .legend i.dash { border-top-style: dashed; }
+  .modes { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-3); pointer-events: auto; }
+  .modes .btn.on { background: var(--cyan); color: var(--bg); }
+  .legend .ag { display: inline-block; width: 8px; height: 8px; margin-right: 8px; transform: rotate(45deg); }
+  .tip { position: absolute; z-index: 5; padding: 6px 8px; font: 400 var(--fs-2)/1.4 var(--f-mono); background: rgba(4,10,16,.92); border: 1px solid var(--line-strong); pointer-events: none; white-space: nowrap; }
+  .tip b { color: var(--cyan); font-weight: 500; }
+  .feed { margin-top: var(--sp-2); font: 400 var(--fs-1)/1.6 var(--f-mono); color: var(--sec); max-width: 300px; }
+  .feed div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .feed div:first-child { color: var(--cyan); }
+  .row .go { padding: 5px 9px; font-size: 11px; }
+  .msg p { overflow-wrap: anywhere; }
+  .msg .perm { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .tl-empty { padding: var(--sp-4); color: var(--sec); font-size: var(--fs-2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header id="top"></header>
+  <main class="main">
+    <section class="panel p-agents">
+      <div class="panel-h"><span class="eyebrow">Agents</span><span class="meta" id="agents-meta"></span></div>
+      <div class="panel-b" style="padding:0" id="agents"></div>
+    </section>
+
+    <section class="panel p-stage">
+      <div class="stage">
+        <canvas id="graph" aria-label="Memory graph with orbiting agents"></canvas>
+        <div class="ov tl-corner">
+          <div class="modes" role="group" aria-label="Graph mode"><button class="btn" data-mode="memory">Memory</button><button class="btn" data-mode="work">Work</button></div>
+          <div class="eyebrow" id="mode-title">Memory graph · graphify</div>
+          <div class="stat" id="stat"></div>
+          <a class="chip cyan demo" id="gsrc" href="/memory.html" style="pointer-events:auto"></a>
+        </div>
+        <div class="ov center" id="center" hidden></div>
+        <div class="ov tr-corner">
+          <div class="eyebrow">Agent activity</div>
+          <div class="feed" id="feed"><div>—</div></div>
+        </div>
+        <div class="ov bl-corner"><div class="legend" id="legend-memory"><span><i></i>EXTRACTED edge</span><span><i class="dash"></i>INFERRED edge</span></div>
+          <div class="legend" id="legend-work" hidden><span><b class="ag" style="background:var(--cyan);border-radius:50%;transform:none"></b>file changed</span><span><b class="ag" style="border:1px solid var(--cyan);border-radius:50%;transform:none"></b>file read</span></div></div>
+        <div class="ov br-corner"><div class="legend">
+          <span><b class="ag" style="background:var(--cyan)"></b>running</span>
+          <span><b class="ag" style="background:var(--red)"></b>waiting for answer</span>
+          <span><b class="ag" style="background:var(--gold)"></b>needs approval</span>
+          <span><b class="ag" style="background:#8fa9b6"></b>idle</span></div></div>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+    </section>
+
+    <section class="panel p-inbox">
+      <div class="panel-h"><span class="eyebrow">Inbox</span><span class="meta" id="inbox-meta"></span></div>
+      <div class="panel-b" style="padding:0" id="inbox"></div>
+    </section>
+
+    <section class="panel p-routines">
+      <div class="panel-h"><span class="eyebrow">Routines · today</span><span class="meta" id="routines-meta"></span></div>
+      <div class="panel-b"><div class="tl" id="tl"></div></div>
+    </section>
+
+    <section class="panel p-sub">
+      <div class="panel-h"><span class="eyebrow" id="sub-title">Subagents</span><span class="meta" id="sub-meta"></span></div>
+      <div class="panel-b" id="sub"></div>
+    </section>
+  </main>
+</div>
+
+<script src="/graph.js"></script>
+<script type="module">
+import { state, subscribe, onActivity, api, act, toast, mountShell, esc, ago, dur, tok, clock, agentState, latestRun, openBlocking, treeHtml, runDuration, chosenGraphId, pathFromToolInput, projectsOf, projectKey } from '/app.js';
+mountShell('index');
+
+const $ = id => document.getElementById(id);
+let selected = null;
+const graph = initGraph($('graph'), { agents: [], auto: false, tooltip: $('tip'), onAgent: a => openChat(a.id) });
+onActivity(a => { graph.pulse(a.agent_id, pathFromToolInput(a.input)); touchFile(a.agent_id, a.name, a.input, a.ts); });
+
+// ---- click an agent: its chat in a modal (the chat page itself, without header and agent list) ----
+function openChat(id) {
+  const agent = state.agents.find(a => a.id === id);
+  if (!agent) return;
+  if (document.querySelector('.modal-ov')) return;
+  if (!['claude', 'codex'].includes(agent.type)) { toast(`Chat is not built for ${agent.type} agents yet`, 'warn'); return; }
+  const opener = document.activeElement, ov = document.createElement('div');
+  ov.className = 'modal-ov';
+  ov.innerHTML = `<div class="modal chat" role="dialog" aria-modal="true" aria-label="Chat with ${esc(agent.name)}">
+    <div class="modal-h"><span class="eyebrow">Chat · ${esc(agent.name)}</span><a class="chip cyan" href="/chat.html#${encodeURIComponent(id)}" title="Open in the Chat tab">Open in tab</a><button class="btn" type="button" data-close>Close</button></div>
+    <iframe title="Chat with ${esc(agent.name)}" src="/chat.html?embed#${encodeURIComponent(id)}"></iframe></div>`;
+  const close = () => { ov.remove(); window.removeEventListener('keydown', onKey); window.removeEventListener('message', onMsg); opener?.focus?.(); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  const onMsg = e => { if (e.origin === location.origin && e.data === 'aios-close') close(); }; // Esc pressed inside the frame
+  ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-close]')) close(); });
+  window.addEventListener('keydown', onKey); window.addEventListener('message', onMsg);
+  document.body.append(ov);
+  const frame = ov.querySelector('iframe');
+  frame.addEventListener('load', () => frame.contentDocument?.getElementById('msg')?.focus());
+}
+
+// ---- modes: memory = code graph of one project, work = every project with its agents, tasks and touched files ----
+const MODE_KEY = 'aios-mode';
+let mode = 'memory';
+try { if (localStorage.getItem(MODE_KEY) === 'work') mode = 'work'; } catch { /* storage unavailable: stay on memory */ }
+const FILE_KIND = { Read: 'read', Grep: 'read', Glob: 'read', LS: 'read', NotebookRead: 'read', Edit: 'write', MultiEdit: 'write', Write: 'write', NotebookEdit: 'write' };
+function touchFile(agentId, tool, input, ts) {
+  const kind = FILE_KIND[tool], agent = state.agents.find(a => a.id === agentId), file = pathFromToolInput(input);
+  if (!kind || !agent || !file) return;
+  graph.touch(projectKey(agent.cwd), agentId, file, kind, ts);
+}
+const STATE_RANK = { running: 0, approval: 1, waiting: 2, idle: 3 };
+const firstLine = text => String(text ?? '').split('\n').find(l => l.trim())?.trim() ?? '';
+function workModel(s) {
+  return projectsOf(s).map(p => ({
+    key: p.key, name: p.name, path: p.path,
+    agents: p.agents.map(a => {
+      const st = agentState(a, s), run = latestRun(a.id, s), blocking = openBlocking(s).find(i => i.agent_id === a.id);
+      const active = run && (run.status === 'running' || run.status === 'queued');
+      const task = active ? (run.status === 'queued' ? 'queued: ' : '') + firstLine(run.prompt) : blocking ? `${blocking.type === 'approval' ? 'needs approval' : 'asks'}: ${blocking.title}` : 'idle';
+      return { id: a.id, name: a.name.toUpperCase(), type: a.type, state: st, task, subs: active ? (s.subagents[run.id] ?? []).filter(x => x.status === 'running').length : 0 };
+    }).sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state]), // the busy ones must not end up under "+N more"
+  }));
+}
+function applyMode() {
+  graph.setMode(mode);
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  const work = mode === 'work';
+  $('mode-title').textContent = work ? 'Work · projects, agents, files' : 'Memory graph · graphify';
+  $('stat').hidden = $('gsrc').hidden = work; $('legend-memory').hidden = work; $('legend-work').hidden = !work;
+  if (work) $('center').hidden = true; // memory mode: the next render shows its own message again
+}
+document.querySelectorAll('[data-mode]').forEach(b => { b.onclick = () => { mode = b.dataset.mode; try { localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ } applyMode(); render(state); }; });
+
+// replay the last minutes of tool calls so the work view is not empty after a reload
+let seeded = false, modeApplied = false;
+async function seedFiles(s) {
+  seeded = true;
+  const recent = s.runs.filter(r => r.started_at && Date.now() - (r.ended_at ?? Date.now()) < 600000).slice(0, 6);
+  for (const r of recent) {
+    try {
+      const { events } = await api('GET', `/api/runs/${r.id}`);
+      for (const e of events) if (e.kind === 'tool') touchFile(r.agent_id, e.data.name, e.data.input, e.ts);
+    } catch (e) { console.error(`could not replay run ${r.id}`, e); }
+  }
+}
+
+// memory graph of the chosen project (Memory page picks it)
+let graphKey = '', graphId = null;
+const statLine = s => `<div>${s.nodes}<small>NODES</small></div><div>${s.edges}<small>EDGES</small></div><div>${s.communities}<small>COMMUNITIES</small></div>`;
+const centerMsg = html => { const c = $('center'); c.hidden = !html; c.innerHTML = html ? `<div class="box">${html}</div>` : ''; };
+async function syncGraph(s) {
+  const id = chosenGraphId(s), p = s.graphs.find(x => x.id === id);
+  $('gsrc').textContent = p ? `${p.name} · ${p.status === 'ready' ? 'graph' : p.status.replace('_', ' ')}` : 'no project';
+  const key = p?.built_at ? `${id}|${p.built_at}` : '';
+  if (id !== graphId) { graphId = id; graphKey = ''; graph.clear(); $('stat').innerHTML = ''; }
+  if (!p || !p.built_at) {
+    centerMsg(!p ? 'No project yet. <a href="/agents.html">Create an agent</a> to get one.'
+      : p.status === 'building' ? 'Indexing the project…'
+      : p.status === 'failed' ? `Indexing failed. <a href="/memory.html">Details</a>`
+      : 'No memory graph yet. <a href="/memory.html">Build it</a>: code is parsed locally, no LLM involved.');
+    return;
+  }
+  if (key === graphKey) return;
+  graphKey = key;
+  try {
+    const v = await api('GET', `/api/graphs/${encodeURIComponent(id)}?limit=500`);
+    if (id !== graphId) return;
+    graph.loadGraph(v); $('stat').innerHTML = statLine(v.stats); centerMsg('');
+  } catch (e) { graphKey = ''; toast(e.message); }
+}
+
+const DAY = 86400000;
+const startOfDay = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const chip = type => `<span class="chip ${type}">${esc(type)}</span>`;
+
+function agentRow(a, s) {
+  const st = agentState(a, s), run = latestRun(a.id, s);
+  const blocking = openBlocking(s).find(i => i.agent_id === a.id);
+  let sub, right = '';
+  if (st === 'running') { sub = `Run #${run.id} · ${esc(run.prompt.split('\n')[0])}`; right = `RUN #${run.id}<br>${dur(runDuration(run))}`; }
+  else if (blocking) { sub = `<span style="color:var(--${blocking.type === 'approval' ? 'gold' : 'red'})">${blocking.type === 'approval' ? 'Needs approval' : 'Asks'}: ${esc(blocking.title)}</span>`; right = `WAITING<br>${ago(blocking.created_at)}`; }
+  else if (run) { sub = `Last run ${esc(run.status)} · ${ago(run.ended_at ?? run.created_at)} ago`; }
+  else sub = 'Never run';
+  if (st === 'idle' && a.next_run) right = `NEXT<br>${clock(a.next_run)}`;
+  if (st === 'idle' && a.deferred_until) { sub = '<span style="color:var(--orange)">Held back by the limit guard</span>'; right = `RETRY<br>${clock(a.deferred_until)}`; }
+  return `<div class="row ${a.id === selected ? 'sel' : ''}" data-select="${esc(a.id)}">
+    <span class="dot ${st === 'idle' ? '' : st === 'approval' ? 'approval' : st === 'waiting' ? 'waiting' : 'running'}"></span>
+    <div><div class="nm">${esc(a.name).toUpperCase()} ${chip(a.type)}</div><div class="sub">${sub}</div></div>
+    <div class="nx">${right || (st === 'idle' ? `<button class="btn go" data-run="${esc(a.id)}">Run</button>` : '')}</div></div>`;
+}
+
+function inboxItem(i) {
+  const cls = i.type === 'question' ? 'q' : i.type === 'approval' ? 'a' : i.type === 'warning' ? 'w' : '';
+  const tag = { question: 'red', approval: 'gold', warning: 'orange', result: 'cyan' }[i.type];
+  const body = i.body.length > 170 ? i.body.slice(0, 170) + '…' : i.body;
+  let acts = '';
+  if (i.status === 'open' && i.type === 'question') acts = [...i.options.map(o => `<button class="btn red" data-answer="${i.id}" data-choice="${esc(o)}">${esc(o)}</button>`), `<a class="btn" href="/inbox.html#${i.id}">Reply…</a>`].join('');
+  else if (i.status === 'open' && i.type === 'approval') acts = `<button class="btn gold" data-answer="${i.id}" data-choice="approve">Approve</button><button class="btn" data-answer="${i.id}" data-choice="deny">Deny</button>`;
+  else if (i.status === 'open') acts = `<button class="btn" data-read="${i.id}">Mark read</button><a class="btn" href="/inbox.html#${i.id}">Open</a>`;
+  const perm = i.type === 'approval' && i.permissions.length ? `<div class="perm">${i.permissions.map(p => `<span class="chip gold">${esc(p)}</span>`).join('')}</div>` : '';
+  return `<article class="msg ${cls} ${i.status === 'open' ? '' : 'read'}"><div class="hd"><span class="chip ${tag}">${esc(i.type)}</span><span class="who">${esc(i.agent_id).toUpperCase()}</span><span class="ago">${ago(i.created_at)}</span></div>
+    <p><b>${esc(i.title)}</b><br>${esc(body)}</p>${perm}${acts ? `<div class="acts">${acts}</div>` : ''}</article>`;
+}
+
+function timeline(s) {
+  const t0 = startOfDay(), now = Date.now(), pc = ms => Math.min(100, Math.max(0, (ms - t0) / DAY * 100));
+  if (!s.agents.length) return '<div class="tl-empty">No agents yet.</div>';
+  const hours = Array.from({ length: 13 }, (_, i) => `<span style="left:${i * 2 / 24 * 100}%">${String(i * 2).padStart(2, '0')}</span>`).join('');
+  const lanes = s.agents.map(a => {
+    const runs = s.runs.filter(r => r.agent_id === a.id && r.started_at && (r.ended_at ?? now) >= t0).map(r => {
+      const cls = r.status === 'running' ? 'live' : r.status === 'failed' ? 'fail' : r.status === 'waiting' ? (openBlocking(s).some(i => i.run_id === r.id && i.type === 'approval') ? 'appr' : 'wait') : '';
+      const l = pc(r.started_at);
+      return `<i class="run ${cls}" style="--l:${l}%;--w:${Math.max(0.4, pc(r.ended_at ?? now) - l)}%" title="#${r.id} ${esc(r.status)} · ${dur(runDuration(r))}"></i>`;
+    }).join('');
+    const plan = (a.upcoming ?? []).map(ts => `<i class="run plan" style="--l:${pc(ts)}%;--w:.6%" title="scheduled ${clock(ts)}"></i>`).join('');
+    return `<div class="tl-lane"><span class="lb">${esc(a.name).toUpperCase()}</span><div class="tl-track">${runs}${plan}</div></div>`;
+  }).join('');
+  return `<div class="tl-hours">${hours}</div><div class="now" style="--l:calc(96px + (100% - 96px) * ${(now - t0) / DAY})"></div>${lanes}`;
+}
+
+let queued = false;
+function render(s) {
+  if (!s.loaded) return;
+  if (!selected || !s.agents.some(a => a.id === selected)) selected = (s.agents.find(a => agentState(a, s) === 'running') ?? s.agents[0])?.id ?? null;
+
+  // agents
+  const running = s.agents.filter(a => agentState(a, s) === 'running').length;
+  $('agents-meta').textContent = `${s.agents.length} · ${running} RUNNING`;
+  $('agents').innerHTML = s.agents.length ? s.agents.map(a => agentRow(a, s)).join('')
+    : '<div class="empty">No agents yet.<br><a href="/agents.html">Create your first agent →</a></div>';
+  graph.setAgents(s.agents.map(a => ({ id: a.id, name: a.name.toUpperCase(), type: a.type, state: agentState(a, s) })));
+  if (!modeApplied) { modeApplied = true; applyMode(); }
+  if (mode === 'work') { graph.setWork(workModel(s)); centerMsg(s.agents.length ? '' : 'No agents yet. <a href="/agents.html">Create one</a> and its project shows up here.'); } else syncGraph(s);
+  if (!seeded) seedFiles(s);
+
+  // inbox
+  const open = s.inbox.filter(i => i.status === 'open');
+  $('inbox-meta').textContent = `${open.length} OPEN`;
+  const ordered = [...open, ...s.inbox.filter(i => i.status !== 'open').slice(0, 4)];
+  $('inbox').innerHTML = ordered.length ? ordered.map(inboxItem).join('') : '<div class="empty">Nothing in the inbox.</div>';
+
+  // routines
+  const failed = s.runs.filter(r => r.status === 'failed' && r.created_at >= startOfDay() - DAY && r.created_at < startOfDay()).length;
+  $('routines-meta').textContent = `${s.agents.filter(a => a.schedule).length} SCHEDULED${failed ? ` · ${failed} FAILED YESTERDAY` : ''}`;
+  $('tl').innerHTML = timeline(s);
+
+  // subagents of the selected agent's latest run
+  const run = selected && latestRun(selected, s);
+  $('sub-title').textContent = run ? `Subagents · ${selected.toUpperCase()} #${run.id}` : 'Subagents';
+  $('sub-meta').textContent = run ? `${tok(run.tokens)} TOK` : '';
+  $('sub').innerHTML = run ? treeHtml(run, s.subagents[run.id] ?? []) : '<div class="empty">No run yet.</div>';
+
+  // activity feed
+  $('feed').innerHTML = s.activity.length ? s.activity.map(a => { const f = pathFromToolInput(a.input); return `<div>${esc(a.agent_id.toUpperCase())} → ${esc(a.name)}${f ? ' ' + esc(f.split(/[\\/]/).pop()) : ''}</div>`; }).join('') : '<div>—</div>';
+}
+subscribe(s => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; render(s); }); } });
+setInterval(() => render(state), 15000); // advance "ago", durations and the now line
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-select],[data-run],[data-answer],[data-read]');
+  if (!t) return;
+  if (t.dataset.run) {
+    act(async () => {
+      const r = await api('POST', `/api/agents/${t.dataset.run}/run`, {});
+      if (r.guard && !r.guard.ok) toast(`Started, but a scheduled run would be held back: ${r.guard.reason}.`, 'warn');
+    });
+    return;
+  }
+  if (t.dataset.answer) { act(() => api('POST', `/api/inbox/${t.dataset.answer}/answer`, { choice: t.dataset.choice })); return; }
+  if (t.dataset.read) { act(() => api('POST', `/api/inbox/${t.dataset.read}/read`, {})); return; }
+  selected = t.dataset.select; render(state);
+});
+</script>
+</body>
+</html>

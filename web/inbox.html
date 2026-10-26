@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Inbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/hud.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .main { grid-template-columns: 220px 400px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .filter { display: flex; justify-content: space-between; align-items: center; padding: 10px var(--sp-4); font: 400 12px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--sec); cursor: pointer; transition: background .15s, color .15s; width: 100%; background: none; border: 0; text-align: left; }
+  .filter:hover { background: var(--cyan-dim); color: var(--txt); }
+  .filter.on { color: var(--cyan); box-shadow: inset 2px 0 0 var(--cyan); background: var(--cyan-dim); }
+  .filter b { font: 500 var(--fs-2)/1 var(--f-mono); }
+  .bubble { padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); background: rgba(0,0,0,.25); max-width: 78ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .bubble.agent { border-left: 2px solid var(--red); }
+  .bubble.a { border-left-color: var(--gold); } .bubble.w { border-left-color: var(--orange); } .bubble.r { border-left-color: var(--cyan); }
+  .bubble.me { margin-left: auto; border-color: var(--line-strong); background: var(--cyan-dim); }
+  .bubble .who { font: 400 var(--fs-1)/1 var(--f-mono); letter-spacing: .16em; color: var(--sec); margin-bottom: 6px; display: block; text-transform: uppercase; }
+  .thread { display: grid; gap: var(--sp-4); padding: var(--sp-2) var(--sp-3) var(--sp-4); }
+  .composer { border-top: 1px solid var(--line); padding: var(--sp-3) var(--sp-4) var(--sp-4); display: grid; gap: var(--sp-3); }
+  .quick { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+  .hint { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; }
+  .head-d { padding: var(--sp-4) var(--sp-4) var(--sp-3); border-bottom: 1px solid var(--line); display: flex; gap: var(--sp-4); align-items: center; }
+  .head-d h2 { font: 700 20px/1.2 var(--f-head); letter-spacing: -.01em; overflow-wrap: anywhere; }
+  .head-d .links { margin-left: auto; display: flex; gap: var(--sp-2); flex: none; }
+  .perm-box { border: 1px solid rgba(var(--g-rgb), .4); background: var(--gold-dim); padding: var(--sp-3) var(--sp-4); max-width: 78ch; }
+  .perm-box .chip { margin: 4px 4px 0 0; }
+  .perm-box .eyebrow { display: flex; margin-bottom: 6px; }
+  .log { font: 400 var(--fs-2)/1.7 var(--f-mono); color: var(--sec); border: 1px solid var(--line); background: rgba(0,0,0,.3); padding: var(--sp-3); max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .log b { color: var(--cyan); font-weight: 400; } .log .e { color: var(--red); } .log .w { color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header id="top"></header>
+  <main class="main">
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Filter</span></div>
+      <div class="panel-b" style="padding:0" id="filters"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Messages</span><span class="meta">NEWEST FIRST</span></div>
+      <div class="panel-b" style="padding:0" id="list"></div>
+    </section>
+    <section class="panel" id="detail"></section>
+  </main>
+</div>
+<script type="module">
+import { state, subscribe, api, act, mountShell, esc, ago, clock, dur } from '/app.js';
+mountShell('inbox');
+const $ = id => document.getElementById(id);
+
+let filter = 'open', selected = Number(location.hash.slice(1)) || null, showLog = false, log = null;
+const FILTERS = [['open', 'All open'], ['question', 'Questions'], ['approval', 'Approvals'], ['warning', 'Warnings'], ['result', 'Results'], ['done', 'Handled']];
+const TAG = { question: 'red', approval: 'gold', warning: 'orange', result: 'cyan' };
+const matches = (i, f) => f === 'open' ? i.status === 'open' : f === 'done' ? i.status !== 'open' : i.type === f && i.status === 'open';
+
+function renderLists(s) {
+  $('filters').innerHTML = FILTERS.map(([id, label]) => `<button class="filter ${id === filter ? 'on' : ''}" data-filter="${id}">${label}<b style="${id === 'question' ? 'color:var(--red)' : id === 'approval' ? 'color:var(--gold)' : id === 'warning' ? 'color:var(--orange)' : ''}">${s.inbox.filter(i => matches(i, id)).length}</b></button>`).join('');
+  const items = s.inbox.filter(i => matches(i, filter));
+  $('list').innerHTML = items.length ? items.map(i => `<article class="msg ${i.type === 'question' ? 'q' : i.type === 'approval' ? 'a' : i.type === 'warning' ? 'w' : ''} ${i.id === selected ? 'sel' : ''} ${i.status === 'open' ? '' : 'read'}" data-id="${i.id}">
+    <div class="hd"><span class="chip ${TAG[i.type]}">${esc(i.type)}</span><span class="who">${esc(i.agent_id).toUpperCase()}</span><span class="ago">${ago(i.created_at)}</span></div>
+    <p>${esc(i.title)}</p></article>`).join('') : '<div class="empty">Nothing here.</div>';
+}
+
+function renderDetail(s) {
+  const i = s.inbox.find(x => x.id === selected);
+  if (!i) { $('detail').innerHTML = '<div class="empty" style="margin:auto">Select a message.</div>'; return; }
+  const open = i.status === 'open', cls = { question: 'agent', approval: 'agent a', warning: 'agent w', result: 'agent r' }[i.type];
+  const agent = s.agents.find(a => a.id === i.agent_id);
+  const bubbles = `<div class="bubble ${cls}"><span class="who">${esc(i.agent_id)} · ${clock(i.created_at)}</span>${esc(i.body)}</div>
+    ${i.type === 'approval' ? `<div class="perm-box"><div class="eyebrow" style="color:var(--gold)">Grants only</div>${i.permissions.map(p => `<span class="chip gold">${esc(p)}</span>`).join('')}<div class="hint" style="margin-top:8px">If you approve, the resumed run may use exactly these. Nothing is granted permanently.</div></div>` : ''}
+    ${i.answer ? `<div class="bubble me"><span class="who">you · ${clock(i.answered_at)}</span>${esc(i.answer)}</div>` : ''}`;
+  let composer = '';
+  if (open && i.type === 'question') composer = `<div class="composer"><div class="quick">${i.options.map(o => `<button class="btn red" data-choice="${esc(o)}">${esc(o)}</button>`).join('')}</div>
+    <div class="field"><label for="reply">Reply</label><textarea class="input" id="reply" placeholder="Answer for ${esc(agent?.name ?? i.agent_id)}…"></textarea></div>
+    <div style="display:flex;align-items:center;gap:var(--sp-4)"><button class="btn solid" data-send>Send &amp; resume run</button><span class="hint">The run has ended. Your answer restarts it with --resume.</span></div></div>`;
+  else if (open && i.type === 'approval') composer = `<div class="composer"><div class="quick"><button class="btn gold" data-choice="approve">Approve</button><button class="btn" data-choice="deny">Deny</button></div>
+    <div class="field"><label for="reply">Note (optional)</label><textarea class="input" id="reply" placeholder="Passed to the agent with your decision…"></textarea></div></div>`;
+  else if (open) composer = `<div class="composer"><div class="quick"><button class="btn" data-read>Mark read</button></div></div>`;
+  $('detail').innerHTML = `<div class="head-d"><span class="dot ${open && i.type === 'question' ? 'waiting' : open && i.type === 'approval' ? 'approval' : ''}"></span><h2>${esc(i.title)}</h2><span class="chip ${agent?.type ?? ''}">${esc(agent?.type ?? '')}</span>
+    <div class="links">${i.run_id ? '<button class="btn" data-log>Run log</button>' : ''}${i.status !== 'archived' && !(open && (i.type === 'question' || i.type === 'approval')) ? '<button class="btn" data-archive>Archive</button>' : ''}</div></div>
+    <div class="panel-b" style="padding-top:var(--sp-4)"><div class="thread">${bubbles}${showLog ? `<div class="log">${log ? log : 'loading…'}</div>` : ''}</div></div>${composer}`;
+}
+
+let reply = '';
+function render(s) {
+  if (!s.loaded) return;
+  if (!selected || !s.inbox.some(i => i.id === selected)) selected = (s.inbox.find(i => matches(i, filter)) ?? s.inbox[0])?.id ?? null;
+  renderLists(s);
+  const ta = $('reply'); if (ta) reply = ta.value;     // keep typing across live updates
+  renderDetail(s);
+  const ta2 = $('reply'); if (ta2) ta2.value = reply;
+}
+subscribe(render);
+
+async function loadLog() {
+  const i = state.inbox.find(x => x.id === selected);
+  if (!i?.run_id) return;
+  const { events } = await api('GET', `/api/runs/${i.run_id}`);
+  log = events.filter(e => ['text', 'tool', 'tool_error', 'warning', 'subagent_start', 'result'].includes(e.kind)).map(e => {
+    const d = e.data, t = clock(e.ts);
+    if (e.kind === 'text') return `${t} ${esc(d.text)}`;
+    if (e.kind === 'tool') return `${t} <b>tool</b> ${esc(d.name)} ${esc(d.input.slice(0, 120))}`;
+    if (e.kind === 'tool_error') return `${t} <span class="e">denied/failed</span> ${esc(d.text.slice(0, 160))}`;
+    if (e.kind === 'warning') return `${t} <span class="w">warning</span> ${esc(d.message)}`;
+    if (e.kind === 'subagent_start') return `${t} <b>subagent</b> ${esc(d.type)} · ${esc(d.description)}`;
+    return `${t} <b>${e.kind}</b>`;
+  }).join('\n');
+  render(state);
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-filter],[data-id],[data-choice],[data-send],[data-read],[data-archive],[data-log]');
+  if (!t) return;
+  if (t.dataset.filter) { filter = t.dataset.filter; selected = null; reply = ''; render(state); }
+  else if (t.dataset.id) { selected = Number(t.dataset.id); location.hash = selected; reply = ''; showLog = false; log = null; render(state); }
+  else if (t.hasAttribute('data-log')) { showLog = !showLog; if (showLog) { log = null; act(loadLog); } render(state); }
+  else if (t.hasAttribute('data-read')) act(() => api('POST', `/api/inbox/${selected}/read`, {}));
+  else if (t.hasAttribute('data-archive')) act(() => api('POST', `/api/inbox/${selected}/archive`, {}));
+  else {
+    const text = $('reply')?.value ?? '';
+    const choice = t.dataset.choice;
+    if (!choice && !text.trim()) return;
+    act(async () => { await api('POST', `/api/inbox/${selected}/answer`, { choice, text }); reply = ''; });
+  }
+});
+</script>
+</body>
+</html>

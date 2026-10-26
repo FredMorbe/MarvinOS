@@ -1,0 +1,7 @@
+node_modules/
+
+# runtime data: chat history, run logs, memory graphs of your projects (npm run setup:graphify recreates the venv)
+data/
+tools/graphify/
+
+*.log

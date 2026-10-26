@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Memory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/hud.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .main { grid-template-columns: 280px minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); }
+  .stage { position: relative; flex: 1; min-height: 0; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .ov { position: absolute; }
+  .ov.top-l { top: var(--sp-3); left: var(--sp-4); pointer-events: none; }
+  .ov.center { inset: 0; display: grid; place-items: center; pointer-events: none; text-align: center; color: var(--sec); }
+  .ov.center .box { max-width: 380px; padding: var(--sp-4); background: rgba(7, 13, 22, .8); border: 1px solid var(--line); pointer-events: auto; }
+  .ov.bot-c { bottom: var(--sp-4); left: 50%; transform: translateX(-50%); display: flex; gap: var(--sp-4); align-items: center; padding: var(--sp-2) var(--sp-4); border: 1px solid var(--line); background: rgba(4,10,16,.75); font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .08em; white-space: nowrap; }
+  .tip { position: absolute; z-index: 5; padding: 6px 8px; font: 400 var(--fs-2)/1.4 var(--f-mono); background: rgba(4,10,16,.92); border: 1px solid var(--line-strong); pointer-events: none; white-space: nowrap; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+  .tip b { color: var(--cyan); font-weight: 500; }
+  .comm { display: grid; grid-template-columns: 14px 1fr auto; gap: var(--sp-3); align-items: center; padding: 8px var(--sp-4); cursor: pointer; font: 400 12px/1.2 var(--f-mono); letter-spacing: .06em; transition: background .15s, opacity .15s; }
+  .comm:hover { background: var(--cyan-dim); }
+  .comm input { position: absolute; opacity: 0; }
+  .comm .sw { width: 10px; height: 10px; background: var(--c); box-shadow: 0 0 6px var(--c); }
+  .comm.off { opacity: .35; } .comm.off .sw { box-shadow: none; background: transparent; border: 1px solid var(--c); }
+  .comm:focus-within { outline: 1px solid var(--cyan); outline-offset: -2px; }
+  .comm span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .comm small { font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); }
+  .side { padding: 0 var(--sp-4) var(--sp-3); display: grid; gap: var(--sp-3); }
+  .acts-row { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+  .opt { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); font: 400 var(--fs-2)/1.2 var(--f-mono); color: var(--sec); cursor: pointer; }
+  .opt input { accent-color: var(--cyan); }
+  select.input { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--sec) 50%), linear-gradient(135deg, var(--sec) 50%, transparent 50%); background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 30px; }
+  select.input option { background: #0d1626; }
+  .hint { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; overflow-wrap: anywhere; }
+  .err { color: var(--red); }
+  .empty-state { padding: var(--sp-5) var(--sp-4); text-align: center; color: var(--sec); font-size: var(--fs-2); }
+  .empty-state .ring { width: 44px; height: 44px; margin: 0 auto var(--sp-3); border: 1px dashed var(--line-strong); border-radius: 50%; display: grid; place-items: center; color: var(--cyan); font: 600 14px var(--f-head); }
+  .nbr { display: flex; justify-content: space-between; gap: var(--sp-3); padding: 5px 0; border-bottom: 1px solid rgba(var(--a-rgb), .07); font: 400 var(--fs-2)/1.3 var(--f-mono); cursor: pointer; }
+  .nbr:hover { color: var(--cyan); }
+  .nbr span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nbr span:last-child { color: var(--dim); flex: none; }
+  .nbr.inf span:last-child { color: var(--orange); }
+  .h3 { margin: var(--sp-4) 0 var(--sp-2); font: 400 var(--fs-1)/1 var(--f-mono); letter-spacing: .2em; color: var(--sec); text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header id="top"></header>
+  <main class="main">
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Project</span></div>
+      <div class="side">
+        <select class="input" id="proj" aria-label="Project"></select>
+        <div class="hint" id="proj-meta"></div>
+        <div class="acts-row"><button class="btn solid" id="build">Build graph</button><button class="btn" id="add">+ Folder</button></div>
+        <form id="add-form" hidden class="field"><label for="add-path">Folder path</label><input class="input" id="add-path" placeholder="D:\Workspace\my-project" autocomplete="off"><span style="display:flex;gap:var(--sp-2)"><button class="btn" type="button" id="browse">Browse…</button><button class="btn" type="submit">Add</button></span></form>
+        <div class="field"><label for="q">Search nodes</label><input class="input" id="q" placeholder="e.g. token, Adapter…" autocomplete="off"><span class="meta" id="qc"> </span></div>
+        <div class="field"><label for="limit">Nodes shown</label><select class="input" id="limit"><option>300</option><option selected>600</option><option>1200</option></select></div>
+      </div>
+      <div class="panel-h" style="padding-top:var(--sp-2)"><span class="eyebrow">Communities</span></div>
+      <div class="panel-b" style="padding:0" id="comms"></div>
+      <label class="opt"><input type="checkbox" id="inf" checked> Show INFERRED edges</label>
+    </section>
+
+    <section class="panel" style="padding:0">
+      <div class="stage">
+        <canvas id="graph" aria-label="Memory graph"></canvas>
+        <div class="ov top-l"><div class="eyebrow">Memory graph · graphify</div><div class="meta" id="stat" style="margin-top:6px"></div></div>
+        <div class="ov center" id="center" hidden></div>
+        <div class="ov bot-c"><span>CLICK A NODE TO INSPECT</span><span>·</span><span>BEAMS = AGENTS TOUCHING THESE FILES</span></div>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Node inspector</span><span class="meta" id="insMeta">NO SELECTION</span></div>
+      <div class="panel-b" id="ins"></div>
+    </section>
+  </main>
+</div>
+
+<script src="/graph.js"></script>
+<script type="module">
+import { state, subscribe, onActivity, api, act, toast, browseFolder, mountShell, esc, ago, dur, agentState, chosenGraphId, chooseGraph, pathFromToolInput } from '/app.js';
+mountShell('memory');
+const $ = id => document.getElementById(id);
+
+const EMPTY = '<div class="empty-state"><div class="ring">◇</div>No node selected.<br>Click a node in the graph to see where it lives and what it connects to.</div>';
+let projectId = null, view = null, viewKey = '', limit = 600;
+
+const g = initGraph($('graph'), { agents: [], auto: false, tooltip: $('tip'), onSelect: renderInspector });
+onActivity(a => g.pulse(a.agent_id, pathFromToolInput(a.input)));
+
+function renderInspector(n, nb) {
+  if (!n) { $('insMeta').textContent = 'NO SELECTION'; $('ins').innerHTML = EMPTY; return; }
+  const c = g.clusters[n.ci], ext = nb.filter(o => o.kind === 'EXTRACTED'), inf = nb.filter(o => o.kind === 'INFERRED');
+  const list = arr => arr.slice(0, 8).map(o => `<div class="nbr ${o.kind === 'INFERRED' ? 'inf' : ''}" data-node="${o.node.id}"><span title="${esc(o.node.name)}">${esc(o.node.name)}</span><span>${esc(o.rel)}</span></div>`).join('') || '<div class="meta" style="padding:5px 0">none</div>';
+  $('insMeta').textContent = `NODE #${n.id}`;
+  $('ins').innerHTML = `
+    <h2 style="font:700 20px/1.2 var(--f-head);letter-spacing:-.01em;overflow-wrap:anywhere">${esc(n.name)}</h2>
+    <div style="display:flex;gap:var(--sp-2);margin:var(--sp-2) 0 var(--sp-3);flex-wrap:wrap"><span class="chip cyan">${esc(c.name)}</span><span class="chip">${esc(n.kind)}</span>${n.god ? '<span class="chip gold">hub</span>' : ''}</div>
+    <dl class="kv"><dt>Links</dt><dd>${n.deg}</dd><dt>Community</dt><dd>${esc(c.name)} · ${c.size}</dd><dt>Source</dt><dd style="overflow-wrap:anywhere">${n.file ? esc(n.file) + (n.line ? ':' + n.line : '') : '—'}</dd></dl>
+    <div class="h3">EXTRACTED · ${ext.length}</div>${list(ext)}
+    <div class="h3">INFERRED · ${inf.length}</div>${list(inf)}
+    ${inf.length ? '<div class="hint" style="margin-top:var(--sp-3)">INFERRED links are deductions of the analyser, not facts in the source.</div>' : ''}`;
+}
+$('ins').addEventListener('click', e => { const el = e.target.closest('[data-node]'); if (el) g.select(g.nodes[+el.dataset.node]); });
+renderInspector(null);
+
+function renderCommunities() {
+  $('comms').innerHTML = '';
+  g.clusters.forEach((c, i) => {
+    const el = document.createElement('label'); el.className = 'comm'; el.style.setProperty('--c', g.clusterColor(i));
+    el.innerHTML = `<input type="checkbox" checked><span class="sw"></span><span title="${esc(c.name)}">${esc(c.name)}</span><small>${c.size}</small>`;
+    el.querySelector('input').onchange = e => { g.setCluster(i, e.target.checked); el.classList.toggle('off', !e.target.checked); };
+    $('comms').appendChild(el);
+  });
+}
+// swatches follow the theme (graph.js re-reads it on the same event, registered earlier)
+window.addEventListener('themechange', () => $('comms').querySelectorAll('.comm').forEach((el, i) => el.style.setProperty('--c', g.clusterColor(i))));
+
+function centerMessage(html) { const c = $('center'); c.hidden = !html; c.innerHTML = html ? `<div class="box">${html}</div>` : ''; }
+
+async function loadView() {
+  const id = projectId;
+  try {
+    const v = await api('GET', `/api/graphs/${encodeURIComponent(id)}?limit=${limit}`);
+    if (id !== projectId) return;
+    view = v; g.loadGraph(v); renderCommunities(); renderInspector(null);
+    const s = v.stats;
+    $('stat').textContent = `${s.nodes} NODES · ${s.edges} EDGES · ${s.communities} COMMUNITIES${s.truncated ? ` · SHOWING ${s.shown_nodes}` : ''}`;
+    centerMessage('');
+  } catch (e) { toast(e.message); }
+}
+
+function renderProject(s) {
+  const sel = $('proj');
+  if (document.activeElement !== sel) {
+    sel.innerHTML = s.graphs.map(p => `<option value="${esc(p.id)}" ${p.id === projectId ? 'selected' : ''}>${esc(p.name)}</option>`).join('') || '<option value="">no projects</option>';
+  }
+  const p = s.graphs.find(x => x.id === projectId);
+  const btn = $('build');
+  if (!p) { $('proj-meta').textContent = 'Create an agent or add a folder to index.'; btn.disabled = true; return; }
+  btn.disabled = p.status === 'building';
+  btn.textContent = p.status === 'building' ? 'Indexing…' : p.status === 'ready' || p.built_at ? 'Rebuild' : 'Build graph';
+  $('proj-meta').innerHTML = `${esc(p.path)}<br>${p.status === 'building' ? 'indexing since ' + ago(p.building_since) + ' ago'
+    : p.built_at ? `built ${ago(p.built_at)} ago · ${p.nodes} nodes · ${dur(p.duration_ms)} · graphify ${esc(p.graphify_version ?? '?')}` : 'not built yet'}${p.status === 'failed' ? `<br><span class="err">${esc(p.error)}</span>` : ''}`;
+  if (p.status === 'not_built' && !view) centerMessage('No memory graph for this folder yet.<br><br>Build it: code is parsed locally, no LLM and no API key involved.');
+  else if (p.status === 'building' && !view) centerMessage('Indexing…');
+  else if (p.status === 'failed' && !view) centerMessage('The last build failed. Details are on the left.');
+}
+
+subscribe(s => {
+  if (!projectId || !s.graphs.some(p => p.id === projectId)) { projectId = chosenGraphId(s); view = null; viewKey = ''; g.clear(); }
+  renderProject(s);
+  const p = s.graphs.find(x => x.id === projectId);
+  const key = p && p.built_at ? `${projectId}|${limit}|${p.built_at}` : '';
+  if (key && key !== viewKey) { viewKey = key; loadView(); }
+  g.setAgents(s.agents.map(a => ({ id: a.id, name: a.name.toUpperCase(), type: a.type, state: agentState(a, s) })));
+});
+
+$('proj').onchange = e => { projectId = e.target.value; chooseGraph(projectId); view = null; viewKey = ''; g.clear(); $('stat').textContent = ''; $('comms').innerHTML = ''; renderInspector(null); renderProject(state); };
+$('limit').onchange = e => {
+  limit = Number(e.target.value);
+  const p = state.graphs.find(x => x.id === projectId);
+  if (p?.built_at) { viewKey = `${projectId}|${limit}|${p.built_at}`; loadView(); }
+};
+$('build').onclick = () => act(async () => { await api('POST', `/api/graphs/${encodeURIComponent(projectId)}/build`, {}); });
+$('add').onclick = () => { $('add-form').hidden = !$('add-form').hidden; if (!$('add-form').hidden) $('add-path').focus(); };
+$('browse').onclick = async () => { const p = await browseFolder($('add-path').value.trim()); if (p) { $('add-path').value = p; $('add-path').focus(); } };
+$('add-form').onsubmit = e => { e.preventDefault(); act(async () => { const p = await api('POST', '/api/graphs', { path: $('add-path').value }); projectId = p.id; chooseGraph(p.id); view = null; viewKey = ''; g.clear(); $('add-form').hidden = true; $('add-path').value = ''; renderProject(state); }); };
+$('inf').onchange = e => g.setInferred(e.target.checked);
+$('q').oninput = e => { const n = g.search(e.target.value); $('qc').textContent = e.target.value ? n + ' MATCHES' : ' '; };
+</script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Inbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="hud.css">
+<link rel="stylesheet" href="themes.css">
+<script src="theme.js"></script>
+<style>
+  .main { grid-template-columns: 220px 400px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .filter { display: flex; justify-content: space-between; align-items: center; padding: 10px var(--sp-4); font: 600 var(--fs-3)/1 var(--f-head); letter-spacing: .14em; text-transform: uppercase; color: var(--sec); cursor: pointer; transition: background .15s, color .15s; }
+  .filter:hover { background: var(--cyan-dim); color: var(--txt); }
+  .filter.on { color: var(--cyan); box-shadow: inset 2px 0 0 var(--cyan); background: var(--cyan-dim); }
+  .filter b { font: 500 var(--fs-2)/1 var(--f-mono); }
+  .group { padding: var(--sp-4) var(--sp-4) var(--sp-2); font: 600 var(--fs-1)/1 var(--f-head); letter-spacing: .24em; color: var(--dim); text-transform: uppercase; }
+  .thread { display: grid; gap: var(--sp-4); padding: var(--sp-2) var(--sp-3) var(--sp-4); }
+  .bubble { padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); background: rgba(0,0,0,.25); max-width: 78%; }
+  .bubble.agent { border-left: 2px solid var(--red); }
+  .bubble.me { margin-left: auto; border-color: var(--line-strong); background: var(--cyan-dim); }
+  .bubble .who { font: 600 var(--fs-1)/1 var(--f-head); letter-spacing: .2em; color: var(--sec); margin-bottom: 6px; display: block; }
+  .ctx { border: 1px solid var(--line); background: rgba(0,0,0,.35); font: 400 var(--fs-2)/1.6 var(--f-mono); padding: var(--sp-3); overflow: auto; color: var(--sec); }
+  .ctx .add { color: var(--cyan); } .ctx .del { color: var(--red); }
+  .composer { border-top: 1px solid var(--line); padding: var(--sp-3) var(--sp-4) var(--sp-4); display: grid; gap: var(--sp-3); }
+  .quick { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+  .hint { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; }
+  .head-d { padding: var(--sp-2) var(--sp-4) var(--sp-3); border-bottom: 1px solid var(--line); display: flex; gap: var(--sp-4); align-items: center; }
+  .head-d h2 { font: 700 20px/1.2 var(--f-head); letter-spacing: .08em; }
+  .head-d .links { margin-left: auto; display: flex; gap: var(--sp-2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="brand" href="index.html" aria-label="AIOS home">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="13" stroke-dasharray="3 3"/><circle cx="16" cy="16" r="8"/><path d="M16 3v5M16 24v5M3 16h5M24 16h5"/></svg>
+      AIOS
+    </a>
+    <nav class="tabs">
+      <a href="index.html">Command</a>
+      <a class="on" href="inbox.html">Inbox <b class="badge red">3</b></a>
+      <a href="agents.html">Agents</a>
+      <a href="memory.html">Memory</a>
+    </nav>
+    <div class="limits">
+      <div class="limit"><div class="lbl"><span>CLAUDE · 5H</span><b>38%</b></div><div class="meter" style="--v:38%"><i></i></div></div>
+      <div class="limit"><div class="lbl"><span>CLAUDE · 7D</span><b>13%</b></div><div class="meter" style="--v:13%"><i></i></div></div>
+      <div class="limit"><div class="lbl"><span>CODEX</span><b>n/a</b></div><div class="meter na"></div></div>
+    </div>
+    <div class="clock">09:47<span>MON 26 OCT</span></div>
+  </header>
+
+  <main class="main">
+    <!-- filters -->
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Filter</span></div>
+      <div class="panel-b" style="padding:0">
+        <div class="filter on">All open <b>3</b></div>
+        <div class="filter">Questions <b style="color:var(--red)">1</b></div>
+        <div class="filter">Approvals <b style="color:var(--gold)">1</b></div>
+        <div class="filter">Warnings <b style="color:var(--orange)">1</b></div>
+        <div class="filter">Results <b>0</b></div>
+        <div class="filter">Archive <b>128</b></div>
+        <div class="group">By agent</div>
+        <div class="filter">Atlas <b>0</b></div>
+        <div class="filter">Forge <b>1</b></div>
+        <div class="filter">Vault <b>1</b></div>
+        <div class="filter">Scribe <b>1</b></div>
+        <div class="filter">Echo <b>0</b></div>
+      </div>
+    </section>
+
+    <!-- list -->
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Messages</span><span class="meta">NEWEST FIRST</span></div>
+      <div class="panel-b" style="padding:0">
+        <article class="msg q sel">
+          <div class="hd"><span class="chip red">Question</span><span class="who">FORGE</span><span class="ago">27m</span></div>
+          <p>Migration passes with both Prisma and raw SQL. Which one for <span style="font-family:var(--f-mono)">orders</span>?</p>
+        </article>
+        <article class="msg a">
+          <div class="hd"><span class="chip gold">Approval</span><span class="who">VAULT</span><span class="ago">17m</span></div>
+          <p>Delete build cache <span style="font-family:var(--f-mono)">.next/</span> (214 MB)?</p>
+        </article>
+        <article class="msg w">
+          <div class="hd"><span class="chip orange">Warning</span><span class="who">SCRIBE</span><span class="ago">2h</span></div>
+          <p>Daily brief ready, but 2 of 7 sources failed to load.</p>
+        </article>
+        <article class="msg read">
+          <div class="hd"><span class="chip cyan">Result</span><span class="who">CONCIERGE</span><span class="ago">1h</span></div>
+          <p>Day plan created: 3 focus blocks.</p>
+        </article>
+        <article class="msg read">
+          <div class="hd"><span class="chip cyan">Result</span><span class="who">ECHO</span><span class="ago">5h</span></div>
+          <p>Notes summary ready (42 files).</p>
+        </article>
+        <article class="msg read">
+          <div class="hd"><span class="chip red">Failed</span><span class="who">VAULT</span><span class="ago">7h</span></div>
+          <p>Nightly cleanup aborted: permission denied on <span style="font-family:var(--f-mono)">dist/</span>.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- detail -->
+    <section class="panel">
+      <div class="head-d" style="padding-top:var(--sp-4)">
+        <span class="dot waiting"></span>
+        <h2>FORGE asks a question</h2>
+        <span class="chip codex">codex</span>
+        <div class="links"><button class="btn">Open run #94</button><button class="btn">Archive</button></div>
+      </div>
+      <div class="panel-b" style="padding-top:var(--sp-4)">
+        <div class="thread">
+          <div class="bubble agent"><span class="who">FORGE · 09:20</span>I implemented the <span style="font-family:var(--f-mono)">orders</span> migration. Both approaches pass the test suite. Prisma gives type safety but adds a dependency; raw SQL keeps the bundle small. Which one should I use?</div>
+          <div class="ctx">
+<span class="del">- db.query('SELECT * FROM orders WHERE user_id = ?', [id])</span><br>
+<span class="add">+ prisma.order.findMany({ where: { userId: id } })</span><br>
+<span class="add">+ // 14 files changed, +212 −188, tests: 61 passed</span>
+          </div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="quick"><button class="btn red">Prisma</button><button class="btn red">Raw SQL</button><button class="btn">Decide yourself</button></div>
+        <div class="field"><label for="reply">Reply</label><textarea class="input" id="reply" placeholder="Answer for Forge…"></textarea></div>
+        <div style="display:flex;align-items:center;gap:var(--sp-4)">
+          <button class="btn solid">Send &amp; resume run</button>
+          <span class="hint">The run is paused. Your answer restarts it with --resume.</span>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="mock-note">MOCKUP · FAKE DATA</div>
+</body>
+</html>

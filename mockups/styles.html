@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Style Picker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #05080d; --txt: #e6edf3; --sec: #8b98a5; --line: rgba(255,255,255,.12); --acc: #2fe6ff; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--txt); font: 400 14px/1.5 'Segoe UI', system-ui, sans-serif; padding: 32px clamp(16px, 4vw, 48px) 64px; }
+  h1 { font: 700 28px/1 Rajdhani, sans-serif; letter-spacing: .2em; }
+  .lead { margin: 10px 0 32px; color: var(--sec); max-width: 70ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr)); gap: 28px; }
+  .card { display: block; color: inherit; text-decoration: none; }
+  .shot { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--line); background: #000; transition: border-color .15s, box-shadow .15s; }
+  .card:hover .shot, .card:focus-visible .shot { border-color: var(--acc); box-shadow: 0 0 24px rgba(47,230,255,.25); }
+  .card:focus-visible { outline: none; }
+  .shot iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; pointer-events: none; }
+  .meta { display: flex; align-items: baseline; gap: 12px; margin-top: 12px; }
+  .meta b { font: 600 18px/1 Rajdhani, sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+  .meta kbd { font: 500 11px/1 'JetBrains Mono', monospace; color: var(--acc); border: 1px solid var(--line); padding: 3px 6px; }
+  .meta span { color: var(--sec); font-size: 13px; }
+  .tag { font: 500 10px/1 'JetBrains Mono', monospace; letter-spacing: .1em; color: var(--sec); text-transform: uppercase; }
+  .group { margin: 40px 0 16px; font: 600 12px/1 'JetBrains Mono', monospace; letter-spacing: .24em; color: var(--sec); text-transform: uppercase; }
+  .group:first-of-type { margin-top: 0; }
+</style>
+</head>
+<body>
+<h1>AIOS · STYLES</h1>
+<p class="lead">Same layout, seven surfaces. Click a card to open the Command Center in that style; inside, press <b>1–7</b> to switch. The choice carries over to Inbox, Agents and Memory.</p>
+
+<div class="group">From your brand</div>
+<div class="grid" id="brand"></div>
+<div class="group">My ideas</div>
+<div class="grid" id="mine"></div>
+
+<script>
+  const BRAND = [
+    ['katsumii', 'Katsumii', 6, '"Living Data", taken from the site\'s v6.css: DM Sans / Manrope / DM Mono, cyan glows + noise, mono nav, filled and outlined pill buttons, 16px gradient cards, ember dot after the logo. No particle stage, no light theme.'],
+    ['x25v', 'X25V', 7, 'Frosted glass from the app: amber accent, Inter, blur(20px) saturate(160%), accent blobs in the background, 10px controls.'],
+  ];
+  const MINE = [
+    ['arc', 'Arc Reactor', 1, 'The current look: cyan HUD, cut corners, scanlines.'],
+    ['mark3', 'Mark III', 2, 'Armour gold on crimson-black, heavy corner cuts, Chakra Petch.'],
+    ['ghost', 'Ghost', 3, 'Quiet monochrome with hairlines. No glow, no scanlines. For long hours on a second monitor.'],
+    ['blueprint', 'Blueprint', 4, 'Drafting paper: cobalt blue, white linework, dashed dividers, mono type.'],
+    ['phosphor', 'Phosphor', 5, 'Green CRT terminal, one mono font, [ bracket ] buttons, heavy scanlines.'],
+  ];
+  const card = ([id, name, key, text]) => `
+    <a class="card" href="index.html?theme=${id}">
+      <div class="shot"><iframe src="index.html?theme=${id}&embed=1" title="${name}" loading="lazy" tabindex="-1"></iframe></div>
+      <div class="meta"><b>${name}</b><kbd>${key}</kbd><span>${text}</span></div>
+    </a>`;
+  document.getElementById('brand').innerHTML = BRAND.map(card).join('');
+  document.getElementById('mine').innerHTML = MINE.map(card).join('');
+
+  // scale each 1920x1080 frame to its card width
+  const fit = () => document.querySelectorAll('.shot').forEach(s => { s.firstElementChild.style.transform = `scale(${s.clientWidth / 1920})`; });
+  new ResizeObserver(fit).observe(document.body); fit();
+</script>
+</body>
+</html>

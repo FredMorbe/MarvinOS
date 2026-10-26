@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="hud.css">
+<link rel="stylesheet" href="themes.css">
+<script src="theme.js"></script>
+<style>
+  .main { grid-template-columns: 300px minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1fr); }
+  .col { display: grid; gap: var(--sp-3); min-height: 0; grid-auto-rows: min-content; }
+  .col.fill { grid-auto-rows: auto; }
+  .form { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3) var(--sp-4); padding: var(--sp-2) var(--sp-4) var(--sp-4); }
+  .form .wide { grid-column: 1 / -1; }
+  .perm { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+  .toggle { display: flex; gap: var(--sp-2); }
+  .toggle button { flex: 1; }
+  .toggle .on { background: var(--cyan-dim); box-shadow: inset 0 0 0 1px var(--cyan); }
+  .spark { display: flex; align-items: flex-end; gap: 3px; height: 54px; padding: 0 var(--sp-4) var(--sp-3); }
+  .spark i { flex: 1; background: var(--cyan); opacity: .55; height: var(--h); min-width: 4px; }
+  .spark i:last-child { opacity: 1; box-shadow: 0 0 8px var(--cyan); }
+  .log { font: 400 var(--fs-2)/1.7 var(--f-mono); color: var(--sec); }
+  .log b { color: var(--cyan); font-weight: 400; }
+  .log .w { color: var(--gold); }
+  .head-a { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-4) var(--sp-4) var(--sp-3); }
+  .head-a h2 { font: 700 26px/1 var(--f-head); letter-spacing: .14em; }
+  .head-a .acts { margin-left: auto; display: flex; gap: var(--sp-2); }
+  td .chip { font-size: 9px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="brand" href="index.html" aria-label="AIOS home">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="13" stroke-dasharray="3 3"/><circle cx="16" cy="16" r="8"/><path d="M16 3v5M16 24v5M3 16h5M24 16h5"/></svg>
+      AIOS
+    </a>
+    <nav class="tabs">
+      <a href="index.html">Command</a>
+      <a href="inbox.html">Inbox <b class="badge red">3</b></a>
+      <a class="on" href="agents.html">Agents</a>
+      <a href="memory.html">Memory</a>
+    </nav>
+    <div class="limits">
+      <div class="limit"><div class="lbl"><span>CLAUDE · 5H</span><b>38%</b></div><div class="meter" style="--v:38%"><i></i></div></div>
+      <div class="limit"><div class="lbl"><span>CLAUDE · 7D</span><b>13%</b></div><div class="meter" style="--v:13%"><i></i></div></div>
+      <div class="limit"><div class="lbl"><span>CODEX</span><b>n/a</b></div><div class="meter na"></div></div>
+    </div>
+    <div class="clock">09:47<span>MON 26 OCT</span></div>
+  </header>
+
+  <main class="main">
+    <!-- agent list -->
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Agents</span><button class="btn" style="padding:6px 10px">+ New</button></div>
+      <div class="panel-b" style="padding:0">
+        <div class="row sel"><span class="dot running"></span><div><div class="nm">ATLAS <span class="chip claude">claude</span></div><div class="sub">2 routines · repo/aios</div></div><div class="nx">RUN #148</div></div>
+        <div class="row"><span class="dot waiting"></span><div><div class="nm">FORGE <span class="chip codex">codex</span></div><div class="sub">1 routine · repo/aios-web</div></div><div class="nx">ASKING</div></div>
+        <div class="row"><span class="dot approval"></span><div><div class="nm">VAULT <span class="chip codex">codex</span></div><div class="sub">1 routine · repo/aios-web</div></div><div class="nx">APPROVAL</div></div>
+        <div class="row"><span class="dot running"></span><div><div class="nm">ECHO <span class="chip ollama">ollama</span></div><div class="sub">2 routines · notes/</div></div><div class="nx">RUN #61</div></div>
+        <div class="row"><span class="dot"></span><div><div class="nm">SCRIBE <span class="chip claude">claude</span></div><div class="sub">2 routines · research/</div></div><div class="nx">NEXT 18:00</div></div>
+        <div class="row"><span class="dot"></span><div><div class="nm">CONCIERGE <span class="chip claude">claude</span></div><div class="sub">1 routine · personal/</div></div><div class="nx">NEXT 17:30</div></div>
+      </div>
+    </section>
+
+    <!-- agent detail -->
+    <div class="col fill">
+      <section class="panel">
+        <div class="head-a">
+          <span class="dot running"></span><h2>ATLAS</h2><span class="chip claude">claude</span><span class="chip cyan">running</span>
+          <div class="acts"><button class="btn">Run now</button><button class="btn red">Stop</button></div>
+        </div>
+        <div class="form">
+          <div class="field"><label for="n">Name</label><input class="input" id="n" value="Atlas"></div>
+          <div class="field"><label for="t">Type</label>
+            <div class="toggle" id="t"><button class="btn on">Claude</button><button class="btn">Codex</button><button class="btn">Ollama</button></div></div>
+          <div class="field wide"><label for="p">Prompt</label><textarea class="input" id="p">Review the open TODOs in the auth module, refactor where tests cover the change, and report results in the inbox. Ask before changing public APIs.</textarea></div>
+          <div class="field"><label for="d">Working directory</label><input class="input" id="d" value="D:\Workspace\aios"></div>
+          <div class="field"><label for="c">Schedule (cron)</label><input class="input" id="c" value="0 9,14 * * 1-5"></div>
+          <div class="field wide"><label>Permissions</label>
+            <div class="perm"><span class="chip cyan">Read</span><span class="chip cyan">Edit</span><span class="chip cyan">Bash(npm test)</span><span class="chip cyan">Bash(git diff)</span><span class="chip gold">Bash(npm install) · ask</span><span class="chip red">Bash(rm) · deny</span></div></div>
+        </div>
+      </section>
+      <section class="panel" style="min-height:260px">
+        <div class="panel-h"><span class="eyebrow">Run history</span><span class="meta">TOKENS PER RUN · LAST 12</span></div>
+        <div class="spark"><i style="--h:30%"></i><i style="--h:45%"></i><i style="--h:38%"></i><i style="--h:70%"></i><i style="--h:52%"></i><i style="--h:44%"></i><i style="--h:60%"></i><i style="--h:35%"></i><i style="--h:80%"></i><i style="--h:48%"></i><i style="--h:57%"></i><i style="--h:100%"></i></div>
+        <div class="panel-b">
+          <table class="table">
+            <thead><tr><th>Run</th><th>Started</th><th>Duration</th><th>Subagents</th><th>Tokens</th><th>Result</th></tr></thead>
+            <tbody>
+              <tr><td>#148</td><td>09:05</td><td>42m</td><td>3</td><td>184k</td><td><span class="chip cyan">running</span></td></tr>
+              <tr><td>#147</td><td>Sun 14:00</td><td>18m</td><td>1</td><td>96k</td><td><span class="chip orange">warnings</span></td></tr>
+              <tr><td>#146</td><td>Sun 09:00</td><td>26m</td><td>2</td><td>121k</td><td><span class="chip cyan">done</span></td></tr>
+              <tr><td>#145</td><td>Sat 14:00</td><td>4m</td><td>0</td><td>11k</td><td><span class="chip red">failed</span></td></tr>
+              <tr><td>#144</td><td>Sat 09:00</td><td>31m</td><td>4</td><td>203k</td><td><span class="chip cyan">done</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- run detail -->
+    <div class="col fill">
+      <section class="panel">
+        <div class="panel-h"><span class="eyebrow">Run #148 · subagents</span><span class="meta">42M · 184K TOK</span></div>
+        <div class="panel-b">
+          <div class="tree"><ul><li>
+            <div class="n"><span class="dot running"></span><span class="t">ATLAS</span><span class="d">main</span><span class="st live">42m 10s</span></div>
+            <ul>
+              <li><div class="n"><span class="dot" style="background:var(--cyan)"></span><span class="t">Explore</span><span class="d">map auth call sites</span><span class="st">12s · 8.2k</span></div></li>
+              <li><div class="n"><span class="dot running"></span><span class="t">general-purpose</span><span class="d">rewrite token.js</span><span class="st live">41s · 22.1k</span></div>
+                <ul><li><div class="n"><span class="dot" style="background:var(--cyan)"></span><span class="t">Explore</span><span class="d">usages of verify()</span><span class="st">6s · 3.4k</span></div></li></ul></li>
+              <li><div class="n"><span class="dot"></span><span class="t">Plan</span><span class="d">migration order</span><span class="st">queued</span></div></li>
+            </ul>
+          </li></ul></div>
+          <dl class="kv" style="margin-top:var(--sp-4)">
+            <dt>Task</dt><dd>rewrite token.js to use signJwt()</dd>
+            <dt>Result</dt><dd style="color:var(--sec)">pending…</dd>
+          </dl>
+        </div>
+      </section>
+      <section class="panel" style="min-height:230px">
+        <div class="panel-h"><span class="eyebrow">Live log</span><span class="meta">STREAM-JSON</span></div>
+        <div class="panel-b log">
+          09:05:02 <b>init</b> session 29a63d60<br>
+          09:05:09 <b>tool</b> Task → Explore<br>
+          09:05:21 <b>done</b> Explore · 8.2k tok<br>
+          09:41:07 <b>tool</b> Task → general-purpose<br>
+          09:41:13 <b>tool</b> Edit src/auth/token.js<br>
+          09:41:40 <span class="w">rate</span> 5h window 38%<br>
+          09:46:51 <b>tool</b> Task → Explore
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+<div class="mock-note">MOCKUP · FAKE DATA</div>
+</body>
+</html>

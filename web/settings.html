@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/hud.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); max-width: 1500px; width: 100%; margin: 0 auto; }
+  .body { display: grid; gap: var(--sp-4); padding: var(--sp-2) var(--sp-4) var(--sp-4); align-content: start; }
+  .hint { font: 400 var(--fs-1)/1.6 var(--f-mono); color: var(--sec); letter-spacing: .04em; }
+  .check { display: flex; align-items: center; gap: var(--sp-3); font: 400 var(--fs-3)/1.3 var(--f-body); color: var(--txt); cursor: pointer; }
+  .check input { accent-color: var(--cyan); width: 16px; height: 16px; }
+  .group { display: grid; gap: var(--sp-2); padding-left: var(--sp-5); }
+  .rangeRow { display: grid; grid-template-columns: 1fr 64px; gap: var(--sp-4); align-items: center; }
+  .rangeRow input[type=range] { accent-color: var(--cyan); width: 100%; }
+  .rangeRow output { font: 500 var(--fs-4)/1 var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; }
+  .usage { font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .08em; }
+  .foot { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; }
+  .status { font: 400 var(--fs-2)/1.4 var(--f-mono); color: var(--sec); overflow-wrap: anywhere; }
+  .status.err { color: var(--red); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header id="top"></header>
+  <main class="main">
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Limit guard</span><span class="meta" id="g-meta"></span></div>
+      <form class="body" id="guard-form">
+        <label class="check"><input type="checkbox" name="g_enabled"> hold back scheduled runs near the usage limit</label>
+        <div class="field"><label for="five">5-hour window</label><div class="rangeRow"><input type="range" id="five" name="five_hour" min="50" max="100" step="1"><output for="five" id="five-o"></output></div><span class="usage" id="five-now"></span></div>
+        <div class="field"><label for="seven">7-day window</label><div class="rangeRow"><input type="range" id="seven" name="seven_day" min="50" max="100" step="1"><output for="seven" id="seven-o"></output></div><span class="usage" id="seven-now"></span></div>
+        <p class="hint">A scheduled run that would start above a threshold is not started. It gets one orange warning in the inbox and is tried again right after that window resets. Runs you start by hand and answers to questions are never blocked; you get a warning instead. Per agent, <b>priority</b> shifts the threshold: high +10 points, low −15.</p>
+        <p class="hint">The numbers come from the CLI's rate-limit events. Until a run has reported them, nothing is held back.</p>
+        <div class="foot"><button class="btn solid" type="submit">Save</button><span class="status" id="g-msg"></span></div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Notifications</span><span class="meta" id="n-meta"></span></div>
+      <form class="body" id="notify-form">
+        <label class="check"><input type="checkbox" name="n_enabled"> Windows toast for new inbox items</label>
+        <div class="group">
+          <label class="check"><input type="checkbox" name="t_question"> questions</label>
+          <label class="check"><input type="checkbox" name="t_approval"> approvals</label>
+          <label class="check"><input type="checkbox" name="t_warning"> warnings</label>
+          <label class="check"><input type="checkbox" name="t_result"> results (silent)</label>
+        </div>
+        <label class="check"><input type="checkbox" name="n_failed"> also when a run fails</label>
+        <p class="hint">Clicking a toast opens that message in the inbox. Toasts are sent by Windows PowerShell and show up under that name. If none appear, check that Windows Focus Assist / Do Not Disturb is off.</p>
+        <div class="foot"><button class="btn solid" type="submit">Save</button><button class="btn" type="button" id="test">Send test toast</button><span class="status" id="n-msg"></span></div>
+      </form>
+    </section>
+  </main>
+</div>
+<script type="module">
+import { state, subscribe, api, act, toast, mountShell } from '/app.js';
+mountShell('settings');
+const $ = id => document.getElementById(id);
+const TYPES = ['question', 'approval', 'warning', 'result'];
+let filled = false;
+
+function fill(s) {
+  const { guard, notify } = s.settings;
+  const f = $('guard-form'), n = $('notify-form');
+  f.g_enabled.checked = guard.enabled;
+  f.five_hour.value = Math.round(guard.five_hour * 100); f.seven_day.value = Math.round(guard.seven_day * 100);
+  n.n_enabled.checked = notify.enabled; n.n_failed.checked = notify.failed_runs;
+  for (const t of TYPES) n[`t_${t}`].checked = notify.types.includes(t);
+  outputs();
+  filled = true;
+}
+const outputs = () => { $('five-o').textContent = `${$('five').value}%`; $('seven-o').textContent = `${$('seven').value}%`; };
+$('five').oninput = $('seven').oninput = outputs;
+
+function live(s) {
+  const w = s.limits.claude?.windows, p = u => (u == null ? 'no data yet' : `now ${Math.round(u * 100)}%`);
+  $('five-now').textContent = p(w?.five_hour?.utilization); $('seven-now').textContent = p(w?.seven_day?.utilization);
+  const g = s.settings.guard;
+  $('g-meta').textContent = g.enabled ? 'ON' : 'OFF';
+  $('n-meta').textContent = !s.notify.supported ? 'WINDOWS ONLY' : s.settings.notify.enabled ? 'ON' : 'OFF';
+  const msg = $('n-msg');
+  msg.classList.toggle('err', !!s.notify.last_error);
+  if (s.notify.last_error) msg.textContent = `Last toast failed: ${s.notify.last_error}`;
+  $('test').disabled = !s.notify.supported;
+}
+
+subscribe(s => {
+  if (!s.settings) return;
+  if (!filled || !document.activeElement?.closest('form')) fill(s); // don't overwrite a form someone is editing
+  live(s);
+});
+
+const collect = () => {
+  const f = $('guard-form'), n = $('notify-form');
+  return {
+    guard: { enabled: f.g_enabled.checked, five_hour: Number(f.five_hour.value) / 100, seven_day: Number(f.seven_day.value) / 100 },
+    notify: { enabled: n.n_enabled.checked, failed_runs: n.n_failed.checked, types: TYPES.filter(t => n[`t_${t}`].checked) },
+  };
+};
+const save = e => { e.preventDefault(); act(async () => { await api('PUT', '/api/settings', collect()); toast('Saved', 'ok'); }); };
+$('guard-form').onsubmit = $('notify-form').onsubmit = save;
+$('test').onclick = () => act(async () => { await api('POST', '/api/notify/test', {}); toast('Test toast sent. If you do not see it, check Focus Assist.', 'ok'); });
+</script>
+</body>
+</html>

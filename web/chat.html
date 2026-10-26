@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/hud.css">
+<link rel="stylesheet" href="/theme.css">
+<script>if (/[?&]embed(&|$)/.test(location.search)) document.documentElement.classList.add('embed'); // shown inside the Command page's chat modal</script>
+<style>
+  html.embed #top, html.embed .main > section:first-child { display: none; }
+  html.embed .app { height: 100vh; grid-template-rows: minmax(0, 1fr); } /* the frame is narrow: keep the full-height layout instead of the stacked one */
+  html.embed .main { grid-template-columns: minmax(0, 1fr); }
+  .main { grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .pick { display: flex; align-items: center; gap: var(--sp-3); padding: 10px var(--sp-4); font: 400 12px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--sec); cursor: pointer; transition: background .15s, color .15s; width: 100%; background: none; border: 0; text-align: left; }
+  .pick:hover { background: var(--cyan-dim); color: var(--txt); }
+  .pick.on { color: var(--cyan); box-shadow: inset 2px 0 0 var(--cyan); background: var(--cyan-dim); }
+  .pick span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pick .pt { min-width: 0; display: grid; gap: 5px; }
+  .pick .pp { font-size: var(--fs-1); letter-spacing: .04em; text-transform: none; opacity: .65; }
+  .pickbar { position: relative; padding: var(--sp-3); border-bottom: 1px solid var(--line); }
+  /* project filter: a listbox in the app style instead of the browser's native select */
+  .dd-btn { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); width: 100%; padding: 9px 12px; font: 400 12px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--txt); background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: border-color .25s, box-shadow .25s; }
+  .dd-btn:hover { border-color: var(--line-strong); }
+  .dd-btn:focus-visible, .dd-btn[aria-expanded="true"] { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 12px rgba(var(--a-rgb), .2); }
+  .dd-btn .dd-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dd-btn svg { flex: none; width: 12px; height: 12px; color: var(--cyan); transition: transform .2s; }
+  .dd-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .dd-list { position: absolute; left: var(--sp-3); right: var(--sp-3); top: calc(100% - var(--sp-3) + 6px); z-index: 20; margin: 0; padding: 6px; list-style: none; max-height: 280px; overflow: auto; background: rgba(13, 22, 38, .96); backdrop-filter: blur(14px); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 18px 40px -12px rgba(0,0,0,.7); }
+  .dd-list[hidden] { display: none; }
+  .dd-opt { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: 9px 10px; border-radius: 8px; font: 400 12px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--sec); cursor: pointer; }
+  .dd-opt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dd-opt .n { flex: none; font-size: var(--fs-1); letter-spacing: .04em; color: var(--dim); }
+  .dd-opt.act, .dd-opt:hover { background: var(--cyan-dim); color: var(--txt); }
+  .dd-opt[aria-selected="true"] { color: var(--cyan); }
+  /* agent list: a pinned "priority" zone on top, everything else below; rows can be dragged between the two */
+  .sect { display: flex; align-items: center; gap: 8px; padding: 14px var(--sp-4) 6px; font: 400 10px/1 var(--f-mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
+  .sect svg { width: 11px; height: 11px; color: var(--cyan); }
+  [data-zone] { border-radius: 12px; transition: background .15s; }
+  [data-zone].over { background: var(--cyan-dim); outline: 1px dashed var(--cyan); outline-offset: -2px; }
+  .zone-empty { margin: 0 var(--sp-3) var(--sp-3); padding: 14px var(--sp-3); border: 1px dashed var(--line-strong); border-radius: 10px; font: 400 var(--fs-1)/1.4 var(--f-mono); letter-spacing: .04em; color: var(--dim); text-align: center; }
+  .pickrow { display: flex; align-items: stretch; }
+  .pickrow .pick { flex: 1; width: auto; min-width: 0; }
+  .pickrow .pin { flex: none; width: 34px; display: grid; place-items: center; background: none; border: 0; color: var(--dim); cursor: pointer; opacity: 0; transition: opacity .15s, color .15s; }
+  .pickrow:hover .pin, .pickrow .pin:focus-visible, .pickrow.pinned .pin { opacity: 1; }
+  .pickrow.pinned .pin { color: var(--cyan); }
+  .pickrow .pin:hover { color: var(--txt); }
+  .pickrow .pin svg { width: 14px; height: 14px; }
+  .pickrow.pinned .pin svg { fill: currentColor; }
+  .pickrow.dragging { opacity: .35; }
+  .pickrow.drop-before { box-shadow: inset 0 2px 0 var(--cyan); }
+  .pickrow.drop-after { box-shadow: inset 0 -2px 0 var(--cyan); }
+  .thread { display: grid; gap: var(--sp-3); padding: var(--sp-3) var(--sp-3) var(--sp-4); align-content: start; }
+  .bubble { padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); background: rgba(0,0,0,.25); max-width: 78ch; white-space: pre-wrap; overflow-wrap: anywhere; border-left: 2px solid var(--cyan); }
+  .bubble.me { margin-left: auto; border-left-color: var(--line); border-color: var(--line-strong); background: var(--cyan-dim); }
+  .bubble.err { border-left-color: var(--red); }
+  .bubble .who { font: 400 var(--fs-1)/1 var(--f-mono); letter-spacing: .16em; color: var(--sec); margin-bottom: 6px; display: block; text-transform: uppercase; }
+  .bubble.me.editing { outline: 1px dashed var(--cyan); }
+  .bubble .who .edit-link { margin-left: var(--sp-3); font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--cyan); background: none; border: 0; padding: 0; cursor: pointer; }
+  .bubble .who .edit-link:hover { text-decoration: underline; }
+  .line { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; overflow-wrap: anywhere; padding-left: var(--sp-4); }
+  .line.w { color: var(--orange); }
+  .line a { color: var(--cyan); }
+  .composer { border-top: 1px solid var(--line); padding: var(--sp-3) var(--sp-4) var(--sp-4); display: grid; gap: var(--sp-3); }
+  .composer textarea { min-height: 64px; resize: vertical; }
+  .actions { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+  .hint { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; }
+  .actions .hint { margin-left: auto; }
+  .col { display: flex; flex-direction: column; min-height: 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header id="top"></header>
+  <main class="main">
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Agents</span></div>
+      <div class="panel-b" style="padding:0">
+        <div class="pickbar">
+          <div class="dd-btn" id="ddbtn" role="combobox" tabindex="0" aria-label="Project filter" aria-haspopup="listbox" aria-expanded="false" aria-controls="ddlist"><span class="dd-v" id="ddv">All projects</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div>
+          <ul class="dd-list" id="ddlist" role="listbox" aria-label="Projects" hidden></ul>
+        </div>
+        <div id="lists">
+          <div data-zone="prio"><div class="sect"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg> Priority</div><div id="prio"></div></div>
+          <div data-zone="rest"><div class="sect">Others</div><div id="picks"></div></div>
+        </div>
+      </div>
+    </section>
+    <section class="panel col">
+      <div class="panel-h"><span class="eyebrow">Chat</span><span class="meta" id="meta"></span></div>
+      <div class="panel-b" id="scroller"><div class="thread" id="thread"></div></div>
+      <form class="composer" id="composer">
+        <textarea class="input" id="msg" aria-label="Message" placeholder="Write to the agent… (Enter sends, Shift+Enter = new line)"></textarea>
+        <div class="actions">
+          <button class="btn solid" type="submit" id="send">Send</button>
+          <button class="btn" type="button" id="cancel" hidden>Cancel edit</button>
+          <button class="btn red" type="button" id="stop" hidden>Stop</button>
+          <button class="btn" type="button" id="fresh">New chat</button>
+          <span class="hint" id="hint"></span>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+<script type="module">
+import { state, subscribe, api, act, toast, mountShell, onText, projectsOf, esc, clock, dur } from '/app.js';
+mountShell('chat');
+const $ = id => document.getElementById(id);
+
+let agentId = decodeURIComponent(location.hash.slice(1)) || null;
+let thread = [];               // [{ run, events }] of the selected agent
+let loadedFor = null, sig = '', timer = null;
+let editRunId = null;          // the sent message being edited in the composer, or null
+let projectFilter = '';        // project key shown in the agent list, '' = all
+
+const agent = () => state.agents.find(a => a.id === agentId);
+const activeRun = () => state.runs.find(r => r.agent_id === agentId && (r.status === 'running' || r.status === 'queued'));
+
+async function load() {
+  const id = agentId;
+  if (!id) return;
+  const data = await api('GET', `/api/agents/${encodeURIComponent(id)}/chat`);
+  if (id !== agentId) return; // the user switched agents while this was loading
+  thread = data.runs; loadedFor = id;
+  renderThread();
+}
+const reload = () => { clearTimeout(timer); timer = setTimeout(() => act(load), 120); };
+
+const PIN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
+let dragId = null, renderLater = false; // a list rebuilt during a drag would cancel it, so renders wait for the drop
+let filterSig = '', filterItems = [], ddActive = 0;
+
+const pins = () => state.chat_pins.filter(id => state.agents.some(a => a.id === id)); // ids of deleted agents are ignored
+
+function renderPicks(s) {
+  if (dragId) { renderLater = true; return; }
+  const projects = projectsOf(s).filter(p => p.agents.length);
+  const projectOf = new Map(projects.flatMap(p => p.agents.map(a => [a.id, p])));
+  if (projectFilter && !projects.some(p => p.key === projectFilter)) projectFilter = ''; // its last agent is gone
+  filterItems = [{ v: '', label: 'All projects', n: s.agents.length }, ...projects.map(p => ({ v: p.key, label: p.name, n: p.agents.length }))];
+  const sig = JSON.stringify([projectFilter, filterItems]);
+  if (sig !== filterSig) { // rebuilding the list on every update would reset the highlight while the user is choosing
+    filterSig = sig;
+    $('ddv').textContent = (filterItems.find(i => i.v === projectFilter) ?? filterItems[0]).label;
+    $('ddlist').innerHTML = filterItems.map((i, k) => `<li class="dd-opt" role="option" id="dd-o${k}" data-i="${k}" aria-selected="${i.v === projectFilter}"><span>${esc(i.label)}</span><span class="n">${i.n}</span></li>`).join('');
+    markActive();
+  }
+  const pinned = new Set(pins());
+  const inFilter = a => !projectFilter || projectOf.get(a.id)?.key === projectFilter;
+  const row = a => {
+    const busy = s.runs.some(r => r.agent_id === a.id && (r.status === 'running' || r.status === 'queued'));
+    const on = pinned.has(a.id);
+    return `<div class="pickrow ${on ? 'pinned' : ''}" draggable="true" data-row="${esc(a.id)}"><button class="pick ${a.id === agentId ? 'on' : ''}" data-agent="${esc(a.id)}" title="${esc(a.cwd)}"><i class="dot ${busy ? 'running' : ''}"></i><div class="pt"><span>${esc(a.name)}</span><span class="pp">${esc(projectOf.get(a.id)?.name ?? '')}</span></div></button><button class="pin" type="button" data-pin="${esc(a.id)}" aria-pressed="${on}" aria-label="${on ? 'Unpin' : 'Pin'} ${esc(a.name)}" title="${on ? 'Unpin' : 'Pin to priority'}">${PIN_SVG}</button></div>`;
+  };
+  const top = pins().map(id => s.agents.find(a => a.id === id)).filter(inFilter);
+  const rest = s.agents.filter(a => !pinned.has(a.id) && inFilter(a));
+  $('prio').innerHTML = top.length ? top.map(row).join('') : `<div class="zone-empty">${pinned.size ? 'No pinned agents in this project' : 'Drag an agent here to pin it'}</div>`;
+  $('picks').innerHTML = !s.agents.length ? '<div class="empty">No agents yet. <a href="/agents.html">Create one</a>.</div>'
+    : rest.length ? rest.map(row).join('')
+    : `<div class="empty">${s.agents.some(inFilter) ? 'All agents are pinned.' : 'No agents in this project.'}</div>`;
+}
+
+async function setPins(ids) {
+  const before = state.chat_pins;
+  state.chat_pins = ids; renderPicks(state); // shown at once, the hub confirms
+  try { await api('PUT', '/api/chat/pins', { ids }); } catch (e) { state.chat_pins = before; renderPicks(state); throw e; }
+}
+
+// ---- project filter (listbox)
+const ddOpen = on => {
+  $('ddlist').hidden = !on;
+  $('ddbtn').setAttribute('aria-expanded', String(on));
+  if (on) { ddActive = Math.max(0, filterItems.findIndex(i => i.v === projectFilter)); markActive(); }
+};
+function markActive() {
+  [...$('ddlist').children].forEach((li, k) => li.classList.toggle('act', k === ddActive));
+  const cur = $('ddlist').children[ddActive];
+  if (cur) { $('ddbtn').setAttribute('aria-activedescendant', cur.id); cur.scrollIntoView({ block: 'nearest' }); }
+}
+function ddChoose(k) {
+  projectFilter = filterItems[k].v;
+  ddOpen(false);
+  renderPicks(state);
+}
+$('ddbtn').onclick = () => ddOpen($('ddlist').hidden);
+$('ddlist').onclick = e => { const li = e.target.closest('[data-i]'); if (li) ddChoose(Number(li.dataset.i)); };
+$('ddbtn').onkeydown = e => {
+  const open = !$('ddlist').hidden, last = filterItems.length - 1;
+  if (e.key === 'Escape' && open) { e.stopPropagation(); ddOpen(false); }
+  else if (e.key === 'Tab' && open) ddOpen(false);
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!open) ddOpen(true); else { ddActive = Math.min(last, Math.max(0, ddActive + (e.key === 'ArrowDown' ? 1 : -1))); markActive(); } }
+  else if (e.key === 'Home' && open) { e.preventDefault(); ddActive = 0; markActive(); }
+  else if (e.key === 'End' && open) { e.preventDefault(); ddActive = last; markActive(); }
+  else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (open) ddChoose(ddActive); else ddOpen(true); }
+};
+document.addEventListener('mousedown', e => { if (!e.target.closest('.pickbar')) ddOpen(false); });
+
+// ---- drag and drop between the zones; the pin button on every row does the same without a mouse
+const lists = $('lists');
+const rowOf = e => e.target.closest?.('.pickrow');
+const clearMarks = () => lists.querySelectorAll('.over, .drop-before, .drop-after').forEach(el => el.classList.remove('over', 'drop-before', 'drop-after'));
+function endDrag() {
+  if (!dragId) return;
+  dragId = null; clearMarks();
+  lists.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+  if (renderLater) { renderLater = false; renderPicks(state); }
+}
+const below = (e, row) => { const r = row.getBoundingClientRect(); return e.clientY >= r.top + r.height / 2; };
+lists.addEventListener('dragstart', e => {
+  const row = rowOf(e);
+  if (!row) return;
+  dragId = row.dataset.row;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', dragId);
+  requestAnimationFrame(() => row.classList.add('dragging'));
+});
+lists.addEventListener('dragover', e => {
+  const zone = e.target.closest('[data-zone]');
+  if (!dragId || !zone) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  clearMarks();
+  zone.classList.add('over');
+  const row = rowOf(e);
+  if (zone.dataset.zone === 'prio' && row && row.dataset.row !== dragId) row.classList.add(below(e, row) ? 'drop-after' : 'drop-before');
+});
+lists.addEventListener('dragleave', e => { if (!lists.contains(e.relatedTarget)) clearMarks(); });
+lists.addEventListener('drop', e => {
+  const zone = e.target.closest('[data-zone]');
+  if (!dragId || !zone) return;
+  e.preventDefault();
+  const id = dragId, row = rowOf(e);
+  const ids = pins().filter(x => x !== id); // dropping into "Others" unpins
+  if (zone.dataset.zone === 'prio') {
+    const at = row && row.dataset.row !== id ? ids.indexOf(row.dataset.row) + (below(e, row) ? 1 : 0) : -1;
+    ids.splice(at < 0 ? ids.length : at, 0, id);
+  }
+  if (JSON.stringify(ids) !== JSON.stringify(pins())) act(() => setPins(ids));
+  endDrag();
+});
+lists.addEventListener('dragend', endDrag);
+
+function renderThread() {
+  const a = agent();
+  const scroller = $('scroller');
+  const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+  if (!a) { $('thread').innerHTML = '<div class="empty">Pick an agent.</div>'; return; }
+  if (!thread.length) { $('thread').innerHTML = `<div class="empty">No chat with ${esc(a.name)} yet. Every message runs the agent with its own tools and folder, so the answer can take a moment.</div>`; return; }
+  $('thread').innerHTML = thread.map(({ run, events, editable }) => {
+    const out = [];
+    if (run.trigger === 'chat') {
+      const editLink = editable && run.id !== editRunId ? ` <button class="edit-link" data-edit="${run.id}" aria-label="Edit message">edit</button>` : '';
+      out.push(`<div class="bubble me ${run.id === editRunId ? 'editing' : ''}"><span class="who">you · ${clock(run.created_at)}${editLink}</span>${esc(run.prompt)}</div>`);
+    }
+    else out.push(`<div class="line">resumed after your answer in the <a href="/inbox.html">inbox</a></div>`);
+    for (const e of events) {
+      const d = e.data;
+      if (e.kind === 'text' && d.owner === 'main') out.push(`<div class="bubble"><span class="who">${esc(a.name)} · ${clock(e.ts)}</span>${esc(d.text)}</div>`);
+      else if (e.kind === 'tool') out.push(`<div class="line">${d.owner === 'main' ? '' : 'subagent · '}tool ${esc(d.name)} ${esc(d.input.slice(0, 100))}</div>`);
+      else if (e.kind === 'tool_error') out.push(`<div class="line w">denied or failed: ${esc(d.text.slice(0, 160))}</div>`);
+    }
+    if (run.status === 'queued') out.push('<div class="line">queued…</div>');
+    else if (run.status === 'running') out.push(`<div class="line">working… ${dur(Date.now() - run.started_at)}</div>`);
+    else if (run.status === 'waiting') out.push('<div class="line w">waiting for your answer in the <a href="/inbox.html">inbox</a></div>');
+    else if (run.status === 'stopped') out.push('<div class="line">stopped</div>');
+    else if (run.status === 'failed') out.push(`<div class="bubble err"><span class="who">run failed</span>${esc(run.error ?? 'unknown error')}</div>`);
+    return out.join('');
+  }).join('');
+  if (nearBottom) scroller.scrollTop = scroller.scrollHeight;
+}
+
+const editItem = () => thread.find(t => t.run.id === editRunId && t.editable);
+
+function leaveEdit(keepText) {
+  editRunId = null;
+  if (!keepText) $('msg').value = '';
+}
+
+function renderComposer() {
+  const a = agent(), run = activeRun();
+  const usable = !!a && ['claude', 'codex'].includes(a.type);
+  if (editRunId && loadedFor === agentId && !editItem()) { // the agent answered (or the run ended) while the message was being edited
+    leaveEdit(true);
+    toast('The agent has already answered, so the message can no longer be edited. Your text stays in the box.', 'warn');
+  }
+  const editing = !!editRunId;
+  $('msg').disabled = !usable || (!!run && !editing);
+  $('send').disabled = !usable || (!!run && !editing);
+  $('send').textContent = editing ? 'Save' : 'Send';
+  $('fresh').disabled = !usable || !!run;
+  $('cancel').hidden = !editing;
+  $('stop').hidden = !run;
+  $('hint').textContent = !a ? '' : !usable ? `${a.type} chat is not available yet` : editing ? 'editing: the agent has not answered yet' : run ? 'the agent is working' : '';
+  $('meta').textContent = a ? `${a.name.toUpperCase()} · ${a.type.toUpperCase()}` : '';
+}
+
+subscribe(s => {
+  if (!s.loaded) return;
+  if (!agentId || !s.agents.some(a => a.id === agentId)) agentId = s.agents[0]?.id ?? null;
+  renderPicks(s); renderComposer();
+  const mine = s.runs.filter(r => r.agent_id === agentId).slice(0, 5).map(r => `${r.id}:${r.status}`).join();
+  if (agentId && (loadedFor !== agentId || mine !== sig)) { sig = mine; reload(); }
+  else renderThread();
+});
+onText(d => { if (d.agent_id === agentId) reload(); });
+setInterval(() => { if (activeRun()) renderThread(); }, 2000); // keeps the "working… 12s" line moving
+
+async function send(fresh) {
+  const message = $('msg').value.trim();
+  if (!message) return;
+  const r = await api('POST', `/api/agents/${encodeURIComponent(agentId)}/chat`, { message, new: fresh });
+  $('msg').value = '';
+  if (r.guard && !r.guard.ok) toast(`Started, but a scheduled run would be held back: ${r.guard.reason}.`, 'warn');
+  await load();
+}
+async function saveEdit() {
+  const message = $('msg').value.trim();
+  if (!message) return;
+  try {
+    await api('POST', `/api/runs/${editRunId}/edit`, { message });
+    leaveEdit(false);
+  } finally { await load(); renderComposer(); } // after a refusal the reload shows why (usually: the agent answered in the meantime)
+}
+$('composer').onsubmit = e => { e.preventDefault(); act(() => (editRunId ? saveEdit() : send(false))); };
+$('msg').onkeydown = e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('composer').requestSubmit(); }
+  else if (e.key === 'Escape' && editRunId) { e.stopPropagation(); leaveEdit(false); renderThread(); renderComposer(); } // must not close the embedded chat
+};
+$('thread').onclick = e => {
+  const b = e.target.closest('[data-edit]');
+  if (!b) return;
+  const item = thread.find(t => t.run.id === Number(b.dataset.edit));
+  if (!item?.editable) return;
+  editRunId = item.run.id;
+  $('msg').value = item.run.prompt;
+  renderThread(); renderComposer();
+  $('msg').focus();
+};
+$('cancel').onclick = () => { leaveEdit(false); renderThread(); renderComposer(); };
+$('fresh').onclick = () => act(async () => {
+  if (!$('msg').value.trim()) { toast('Type the first message of the new chat, then press New chat.', 'warn'); return; }
+  await send(true);
+});
+$('stop').onclick = () => act(() => api('POST', `/api/runs/${activeRun().id}/stop`, {}));
+if (document.documentElement.classList.contains('embed')) addEventListener('keydown', e => { if (e.key === 'Escape') parent.postMessage('aios-close', location.origin); });
+$('lists').onclick = e => {
+  const pin = e.target.closest('[data-pin]');
+  if (pin) { const id = pin.dataset.pin; act(() => setPins(pins().includes(id) ? pins().filter(x => x !== id) : [...pins(), id])); return; }
+  const b = e.target.closest('[data-agent]');
+  if (!b) return;
+  leaveEdit(false);
+  agentId = b.dataset.agent; location.hash = encodeURIComponent(agentId); thread = []; loadedFor = null;
+  renderPicks(state); renderComposer(); reload();
+};
+</script>
+</body>
+</html>

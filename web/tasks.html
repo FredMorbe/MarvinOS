@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Tasks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/hud.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .main { grid-template-columns: minmax(0, 1fr) 420px; grid-template-rows: minmax(0, 1fr); }
+  .bar { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4) var(--sp-3); }
+  .bar .input { max-width: 320px; }
+  .bar .btn { margin-left: auto; }
+  .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-4); padding: 0 var(--sp-4) var(--sp-4); align-items: start; }
+  .col h3 { font: 400 var(--fs-1)/1 var(--f-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--sec); padding-bottom: var(--sp-3); display: flex; justify-content: space-between; }
+  .col .stack { display: grid; gap: var(--sp-2); }
+  .tcard { text-align: left; width: 100%; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); background: rgba(0,0,0,.25); color: var(--txt); cursor: pointer; display: grid; gap: 6px; transition: border-color .15s, background .15s; }
+  .tcard:hover { border-color: var(--line-strong); }
+  .tcard.sel { border-color: var(--cyan); background: var(--cyan-dim); }
+  .tcard.failed { border-left: 2px solid var(--red); }
+  .tcard.waiting { border-left: 2px solid var(--red); }
+  .tcard b { font: 500 var(--fs-3)/1.3 var(--f-body); overflow-wrap: anywhere; }
+  .tcard .meta2 { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .note { font: 400 var(--fs-1)/1.4 var(--f-mono); color: var(--orange); overflow-wrap: anywhere; }
+  .note.bad { color: var(--red); }
+  .detail { display: flex; flex-direction: column; min-height: 0; }
+  .form { display: grid; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4) var(--sp-4); }
+  .form textarea { min-height: 120px; resize: vertical; }
+  .check { display: flex; align-items: center; gap: var(--sp-3); font: 400 var(--fs-3)/1.3 var(--f-body); cursor: pointer; }
+  .check input { accent-color: var(--cyan); width: 16px; height: 16px; }
+  .acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
+  .hint { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; overflow-wrap: anywhere; }
+  .result { border: 1px solid var(--line); background: rgba(0,0,0,.3); padding: var(--sp-3); font: 400 var(--fs-2)/1.6 var(--f-mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+  .result.err { border-color: var(--red); color: var(--red); }
+  .head-d { padding: var(--sp-2) var(--sp-4) var(--sp-3); display: flex; gap: var(--sp-3); align-items: center; }
+  .head-d h2 { font: 700 18px/1.2 var(--f-head); letter-spacing: -.01em; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header id="top"></header>
+  <main class="main">
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Tasks</span><span class="meta" id="meta"></span></div>
+      <div class="bar"><select class="input" id="filter" aria-label="Project filter"></select><button class="btn solid" type="button" id="new">New task</button></div>
+      <div class="panel-b"><div class="board" id="board"></div></div>
+    </section>
+    <section class="panel detail" id="detail"></section>
+  </main>
+</div>
+<script type="module">
+import { state, subscribe, api, act, toast, mountShell, projectsOf, projectKey, esc, dur, tok, clock } from '/app.js';
+mountShell('tasks');
+const $ = id => document.getElementById(id);
+
+let filter = decodeURIComponent(location.hash.slice(1)) || '';  // project key, '' = all
+let selected = null;                                             // task id, 'new' or null
+let draft = null;                                                // unsaved form state { for, ...fields }
+let detailSig = '';
+
+const COLUMNS = [['todo', 'To do', ['todo', 'failed', 'stopped']], ['running', 'Running', ['running', 'waiting']], ['done', 'Done', ['done']]];
+const task = id => state.tasks.find(t => t.id === id);
+const projects = () => projectsOf(state);
+const projectOf = path => projects().find(p => p.key === projectKey(path));
+const agentsOf = path => state.agents.filter(a => ['claude', 'codex'].includes(a.type) && projectKey(a.cwd) === projectKey(path));
+const visible = () => state.tasks.filter(t => !filter || projectKey(t.project_path) === filter);
+
+function renderFilter() {
+  const ps = projects();
+  $('filter').innerHTML = `<option value="">All projects</option>${ps.map(p => `<option value="${esc(p.key)}" ${p.key === filter ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}`;
+}
+
+function card(t) {
+  const p = projectOf(t.project_path), a = state.agents.find(x => x.id === t.agent_id);
+  const st = t.status === 'failed' ? '<span class="chip red">failed</span>' : t.status === 'waiting' ? '<span class="chip red">asks you</span>' : t.status === 'stopped' ? '<span class="chip">stopped</span>' : t.status === 'running' ? '<span class="chip cyan">running</span>' : '';
+  return `<button class="tcard ${t.id === selected ? 'sel' : ''} ${t.status}" type="button" data-task="${t.id}">
+    <b>${esc(t.title)}</b>
+    <span class="meta2">${st}${filter ? '' : `<span class="chip">${esc(p?.name ?? '?')}</span>`}${a ? `<span class="chip ${esc(a.type)}">${esc(a.name)}</span>` : '<span class="chip orange">no agent</span>'}${t.auto && t.status === 'todo' ? '<span class="chip cyan">auto</span>' : ''}</span>
+    ${t.note ? `<span class="note ${t.status === 'failed' ? 'bad' : ''}">${esc(t.note)}</span>` : ''}</button>`;
+}
+
+function renderBoard() {
+  const ts = visible();
+  $('meta').textContent = `${ts.filter(t => t.status === 'todo').length} TO DO · ${ts.filter(t => t.status === 'running' || t.status === 'waiting').length} ACTIVE`;
+  $('board').innerHTML = COLUMNS.map(([id, label, statuses]) => {
+    const items = ts.filter(t => statuses.includes(t.status));
+    return `<div class="col"><h3><span>${label}</span><span>${items.length}</span></h3><div class="stack">${items.length ? items.map(card).join('') : '<div class="empty" style="padding:var(--sp-3)">–</div>'}</div></div>`;
+  }).join('');
+}
+
+function formHtml(f, t) {
+  const locked = t && (t.status === 'running' || t.status === 'waiting');
+  const agents = agentsOf(f.project_path);
+  const projectField = t ? `<div class="field"><label>Project</label><div class="hint">${esc(projectOf(t.project_path)?.name ?? t.project_path)} · ${esc(t.project_path)}</div></div>`
+    : `<div class="field"><label for="f-project">Project</label><select class="input" id="f-project" name="project_path">${projects().map(p => `<option value="${esc(p.path)}" ${projectKey(p.path) === projectKey(f.project_path) ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>`;
+  return `<form class="form" id="form" autocomplete="off">
+    ${projectField}
+    <div class="field"><label for="f-title">Title</label><input class="input" id="f-title" name="title" value="${esc(f.title)}" ${locked ? 'disabled' : ''}></div>
+    <div class="field"><label for="f-body">Description</label><textarea class="input" id="f-body" name="body" placeholder="What exactly should be done? The agent only gets this text." ${locked ? 'disabled' : ''}>${esc(f.body)}</textarea></div>
+    <div class="field"><label for="f-agent">Agent</label><select class="input" id="f-agent" name="agent_id" ${locked ? 'disabled' : ''}><option value="">— unassigned —</option>${agents.map(a => `<option value="${esc(a.id)}" ${a.id === f.agent_id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
+      ${agents.length ? '' : '<span class="hint">No agent works in this folder yet. Create one with "New agent here" on the Projects page.</span>'}</div>
+    <label class="check"><input type="checkbox" name="auto" ${f.auto ? 'checked' : ''} ${locked ? 'disabled' : ''}> start automatically when the agent and the folder are free</label>
+    <div class="acts"><button class="btn solid" type="submit" ${locked ? 'disabled' : ''}>${t ? 'Save' : 'Create task'}</button></div>
+  </form>`;
+}
+
+function resultHtml(t) {
+  const run = t.last_run_id && state.runs.find(r => r.id === t.last_run_id);
+  if (!run) return '';
+  const body = run.status === 'failed' ? `<div class="result err">${esc(run.error ?? 'run failed')}</div>` : run.result_text ? `<div class="result">${esc(run.result_text)}</div>` : '';
+  return `<div class="form" style="padding-top:0"><div class="hint">Run #${run.id} · ${esc(run.status)}${run.started_at ? ` · ${dur((run.ended_at ?? Date.now()) - run.started_at)}` : ''} · ${tok(run.tokens)} tokens${t.status === 'waiting' ? ' · <a href="/inbox.html" style="color:var(--cyan)">answer in the inbox</a>' : ''}</div>${body}</div>`;
+}
+
+function renderDetail() {
+  const t = typeof selected === 'number' ? task(selected) : null;
+  if (selected === 'new') {
+    const first = (filter && projects().find(p => p.key === filter)) ?? projects()[0];
+    const f = draft?.for === 'new' ? draft : { project_path: first?.path ?? '', title: '', body: '', agent_id: '', auto: false };
+    $('detail').innerHTML = projects().length ? `<div class="panel-h"><span class="eyebrow">New task</span></div><div class="panel-b">${formHtml(f, null)}</div>`
+      : '<div class="empty" style="margin:auto">Add a project first (Projects tab).</div>';
+    return;
+  }
+  if (!t) { $('detail').innerHTML = '<div class="empty" style="margin:auto">Select a task or create one.</div>'; return; }
+  const f = draft?.for === t.id ? draft : { project_path: t.project_path, title: t.title, body: t.body, agent_id: t.agent_id ?? '', auto: t.auto };
+  const active = t.status === 'running' || t.status === 'waiting';
+  $('detail').innerHTML = `<div class="panel-h"><span class="eyebrow">Task #${t.id}</span><span class="meta">${esc(t.status.toUpperCase())}</span></div>
+    <div class="panel-b">
+    <div class="head-d"><h2>${esc(t.title)}</h2></div>
+    <div class="form" style="padding-bottom:0"><div class="acts">
+      ${active ? '<button class="btn red" type="button" data-stop>Stop</button>' : `<button class="btn solid" type="button" data-start ${t.agent_id ? '' : 'disabled title="Assign an agent first"'}>${t.status === 'todo' ? 'Start now' : 'Run again'}</button>`}
+      ${t.status === 'running' ? '' : '<button class="btn" type="button" data-delete>Delete</button>'}</div>
+      ${t.note ? `<div class="note ${t.status === 'failed' ? 'bad' : ''}">${esc(t.note)}</div>` : ''}</div>
+    ${resultHtml(t)}${formHtml(f, t)}</div>`;
+}
+
+function render(s) {
+  if (!s.loaded) return;
+  renderFilter(); renderBoard();
+  const t = typeof selected === 'number' ? task(selected) : null;
+  if (typeof selected === 'number' && !t) selected = null;
+  const sig = JSON.stringify([selected, t?.status, t?.last_run_id, t?.note, t?.agent_id, s.agents.length, projects().length, t && s.runs.find(r => r.id === t.last_run_id)?.status]);
+  if (sig !== detailSig) { detailSig = sig; renderDetail(); }
+}
+subscribe(render);
+setInterval(() => { if (typeof selected === 'number' && task(selected)?.status === 'running') { detailSig = ''; if (!document.activeElement?.closest('#form')) render(state); } }, 5000); // advances the run duration
+
+const readForm = () => {
+  const f = new FormData($('form'));
+  return { for: selected, project_path: f.get('project_path') ?? task(selected)?.project_path, title: f.get('title') ?? '', body: f.get('body') ?? '', agent_id: f.get('agent_id') ?? '', auto: f.has('auto') };
+};
+document.addEventListener('input', e => { if (e.target.closest('#form')) draft = readForm(); });
+document.addEventListener('change', e => {
+  if (e.target.id === 'f-project') { draft = readForm(); draft.agent_id = ''; renderDetail(); } // the agent list depends on the project
+  else if (e.target.id === 'filter') { filter = e.target.value; history.replaceState(null, '', filter ? `#${encodeURIComponent(filter)}` : location.pathname); renderBoard(); }
+});
+
+document.addEventListener('submit', e => {
+  e.preventDefault();
+  const f = readForm(), body = { project_path: f.project_path, title: f.title, body: f.body, agent_id: f.agent_id || null, auto: f.auto };
+  act(async () => {
+    if (selected === 'new') { const t = await api('POST', '/api/tasks', body); selected = t.id; }
+    else await api('PUT', `/api/tasks/${selected}`, body);
+    draft = null; detailSig = ''; toast('Saved', 'ok'); render(state);
+  });
+});
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-task],#new,[data-start],[data-stop],[data-delete]');
+  if (!t) return;
+  if (t.dataset.task) { selected = Number(t.dataset.task); draft = null; detailSig = ''; render(state); }
+  else if (t.id === 'new') { selected = 'new'; draft = null; detailSig = ''; render(state); }
+  else if (t.hasAttribute('data-start')) act(async () => {
+    const r = await api('POST', `/api/tasks/${selected}/start`, {});
+    if (r.guard && !r.guard.ok) toast(`Started, but a scheduled run would be held back: ${r.guard.reason}.`, 'warn');
+  });
+  else if (t.hasAttribute('data-stop')) act(() => api('POST', `/api/tasks/${selected}/stop`, {}));
+  else if (t.hasAttribute('data-delete') && confirm(`Delete task "${task(selected)?.title}"? Its runs stay in the logs.`)) act(async () => { await api('DELETE', `/api/tasks/${selected}`); selected = null; detailSig = ''; render(state); });
+});
+</script>
+</body>
+</html>

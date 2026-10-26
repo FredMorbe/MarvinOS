@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Memory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="hud.css">
+<link rel="stylesheet" href="themes.css">
+<script src="theme.js"></script>
+<style>
+  .main { grid-template-columns: 260px minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); }
+  .stage { position: relative; flex: 1; min-height: 0; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .ov { position: absolute; }
+  .ov.top-l { top: var(--sp-3); left: var(--sp-4); pointer-events: none; }
+  .ov.bot-c { bottom: var(--sp-4); left: 50%; transform: translateX(-50%); display: flex; gap: var(--sp-4); align-items: center; padding: var(--sp-2) var(--sp-4); border: 1px solid var(--line); background: rgba(4,10,16,.75); font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .08em; }
+  .tip { position: absolute; z-index: 5; padding: 6px 8px; font: 400 var(--fs-2)/1.4 var(--f-mono); background: rgba(4,10,16,.92); border: 1px solid var(--line-strong); pointer-events: none; white-space: nowrap; }
+  .tip b { color: var(--cyan); font-weight: 500; }
+  .comm { display: grid; grid-template-columns: 14px 1fr auto; gap: var(--sp-3); align-items: center; padding: 9px var(--sp-4); cursor: pointer; font: 600 var(--fs-3)/1 var(--f-head); letter-spacing: .14em; text-transform: uppercase; transition: background .15s, opacity .15s; }
+  .comm:hover { background: var(--cyan-dim); }
+  .comm input { position: absolute; opacity: 0; }
+  .comm .sw { width: 10px; height: 10px; background: var(--c); box-shadow: 0 0 6px var(--c); }
+  .comm.off { opacity: .35; } .comm.off .sw { box-shadow: none; background: transparent; border: 1px solid var(--c); }
+  .comm:focus-within { outline: 1px solid var(--cyan); outline-offset: -2px; }
+  .comm small { font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); }
+  .search { padding: 0 var(--sp-4) var(--sp-3); }
+  .opt { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); font: 400 var(--fs-2)/1.2 var(--f-mono); color: var(--sec); cursor: pointer; }
+  .opt input { accent-color: var(--cyan); }
+  .empty-state { padding: var(--sp-5) var(--sp-4); text-align: center; color: var(--sec); font-size: var(--fs-2); }
+  .empty-state .ring { width: 44px; height: 44px; margin: 0 auto var(--sp-3); border: 1px dashed var(--line-strong); border-radius: 50%; display: grid; place-items: center; color: var(--cyan); font: 600 14px var(--f-head); }
+  .nbr { display: flex; justify-content: space-between; gap: var(--sp-3); padding: 5px 0; border-bottom: 1px solid rgba(var(--a-rgb),.07); font: 400 var(--fs-2)/1.3 var(--f-mono); cursor: pointer; }
+  .nbr:hover { color: var(--cyan); }
+  .nbr span:last-child { color: var(--dim); }
+  .nbr.inf span:last-child { color: var(--gold); }
+  .h3 { margin: var(--sp-4) 0 var(--sp-2); font: 600 var(--fs-1)/1 var(--f-head); letter-spacing: .22em; color: var(--sec); text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="brand" href="index.html" aria-label="AIOS home">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="13" stroke-dasharray="3 3"/><circle cx="16" cy="16" r="8"/><path d="M16 3v5M16 24v5M3 16h5M24 16h5"/></svg>
+      AIOS
+    </a>
+    <nav class="tabs">
+      <a href="index.html">Command</a>
+      <a href="inbox.html">Inbox <b class="badge red">3</b></a>
+      <a href="agents.html">Agents</a>
+      <a class="on" href="memory.html">Memory</a>
+    </nav>
+    <div class="limits">
+      <div class="limit"><div class="lbl"><span>CLAUDE · 5H</span><b>38%</b></div><div class="meter" style="--v:38%"><i></i></div></div>
+      <div class="limit"><div class="lbl"><span>CLAUDE · 7D</span><b>13%</b></div><div class="meter" style="--v:13%"><i></i></div></div>
+      <div class="limit"><div class="lbl"><span>CODEX</span><b>n/a</b></div><div class="meter na"></div></div>
+    </div>
+    <div class="clock">09:47<span>MON 26 OCT</span></div>
+  </header>
+
+  <main class="main">
+    <!-- filters -->
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Project</span><span class="meta">repo/aios</span></div>
+      <div class="search"><div class="field"><label for="q">Search nodes</label><input class="input" id="q" placeholder="e.g. token, Adapter…" autocomplete="off"><span class="meta" id="qc" style="margin-top:4px"> </span></div></div>
+      <div class="panel-h" style="padding-top:var(--sp-2)"><span class="eyebrow">Communities</span></div>
+      <div class="panel-b" style="padding:0" id="comms"></div>
+      <label class="opt"><input type="checkbox" id="inf" checked> Show INFERRED edges</label>
+    </section>
+
+    <!-- graph -->
+    <section class="panel" style="padding:0">
+      <div class="stage">
+        <canvas id="graph" aria-label="Full memory graph"></canvas>
+        <div class="ov top-l"><div class="eyebrow">Memory graph · graphify</div><div class="meta" id="stat" style="margin-top:6px"></div></div>
+        <div class="ov bot-c"><span>CLICK NODE TO INSPECT</span><span>·</span><span>AGENTS ORBIT THE CORE AND READ MEMORY LIVE</span></div>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+    </section>
+
+    <!-- inspector -->
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Node inspector</span><span class="meta" id="insMeta">NO SELECTION</span></div>
+      <div class="panel-b" id="ins">
+        <div class="empty-state"><div class="ring">◇</div>No node selected.<br>Click a node in the graph to see its links and which agents read it.</div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="mock-note">MOCKUP · FAKE DATA</div>
+
+<script src="graph.js"></script>
+<script>
+  const ins = document.getElementById('ins'), insMeta = document.getElementById('insMeta');
+  const g = initGraph(document.getElementById('graph'), {
+    tooltip: document.getElementById('tip'),
+    onSelect(n, nb) {
+      if (!n) { insMeta.textContent = 'NO SELECTION'; ins.innerHTML = '<div class="empty-state"><div class="ring">◇</div>No node selected.<br>Click a node in the graph to see its links and which agents read it.</div>'; return; }
+      const c = g.clusters[n.ci], ext = nb.filter(o => o.kind === 'EXTRACTED'), inf = nb.filter(o => o.kind === 'INFERRED');
+      const list = arr => arr.slice(0, 7).map(o => `<div class="nbr ${o.kind === 'INFERRED' ? 'inf' : ''}" data-id="${o.node.id}"><span>${o.node.name}</span><span>${g.clusters[o.node.ci].name}</span></div>`).join('') || '<div class="meta" style="padding:5px 0">none</div>';
+      insMeta.textContent = 'NODE #' + n.id;
+      ins.innerHTML = `
+        <h2 style="font:700 20px/1.2 var(--f-head);letter-spacing:.06em;word-break:break-all">${n.name}</h2>
+        <div style="display:flex;gap:var(--sp-2);margin:var(--sp-2) 0 var(--sp-3)"><span class="chip cyan">${c.name}</span><span class="chip">${n.kind}</span>${n.god ? '<span class="chip gold">god node</span>' : ''}</div>
+        <dl class="kv"><dt>Links</dt><dd>${n.deg}</dd><dt>Community</dt><dd>${c.name}</dd><dt>Last read</dt><dd>ATLAS · 2m ago</dd></dl>
+        <div class="h3">EXTRACTED · ${ext.length}</div>${list(ext)}
+        <div class="h3">INFERRED · ${inf.length}</div>${list(inf)}
+        <div class="h3">Agents that read this</div>
+        <div style="display:flex;gap:var(--sp-2);flex-wrap:wrap"><span class="chip claude">atlas · 6×</span><span class="chip codex">forge · 2×</span><span class="chip ollama">echo · 1×</span></div>
+        <div class="field" style="margin-top:var(--sp-4)"><label for="ask">Ask the graph</label><input class="input" id="ask" placeholder="What depends on ${n.name}?"></div>`;
+      ins.querySelectorAll('.nbr').forEach(el => el.onclick = () => g.select(g.nodes[+el.dataset.id]));
+    },
+  });
+  const s = g.stats();
+  document.getElementById('stat').textContent = `${s.nodes} NODES · ${s.edges} EDGES · ${s.communities} COMMUNITIES`;
+
+  const comms = document.getElementById('comms');
+  g.clusters.forEach((c, i) => {
+    const count = g.nodes.filter(n => n.ci === i).length;
+    const el = document.createElement('label'); el.className = 'comm'; el.style.setProperty('--c', g.clusterColor(i));
+    el.innerHTML = `<input type="checkbox" checked><span class="sw"></span><span>${c.name}</span><small>${count}</small>`;
+    el.querySelector('input').onchange = e => { g.setCluster(i, e.target.checked); el.classList.toggle('off', !e.target.checked); };
+    comms.appendChild(el);
+  });
+  // swatches follow the active style (graph.js re-reads the theme on the same event, registered earlier)
+  window.addEventListener('themechange', () => comms.querySelectorAll('.comm').forEach((el, i) => el.style.setProperty('--c', g.clusterColor(i))));
+  document.getElementById('inf').onchange = e => g.setInferred(e.target.checked);
+  const qc = document.getElementById('qc');
+  document.getElementById('q').oninput = e => { const n = g.search(e.target.value); qc.textContent = e.target.value ? n + ' MATCHES' : ' '; };
+</script>
+</body>
+</html>

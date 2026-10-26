@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIOS — Agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/hud.css">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .main { grid-template-columns: 300px minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1fr); }
+  .col { display: grid; gap: var(--sp-3); min-height: 0; grid-template-rows: auto minmax(0, 1fr); }
+  .pathrow { display: flex; gap: var(--sp-2); }
+  .pathrow .input { flex: 1; min-width: 0; }
+  .form { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3) var(--sp-4); padding: var(--sp-2) var(--sp-4) var(--sp-4); }
+  .form .wide { grid-column: 1 / -1; }
+  .toggle { display: flex; gap: var(--sp-2); }
+  .toggle button { flex: 1; }
+  .toggle .on { background: var(--cyan-dim); border-color: var(--cyan); color: var(--cyan); }
+  .toggle button:disabled { opacity: .35; cursor: not-allowed; }
+  .head-a { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-4) var(--sp-4) var(--sp-3); }
+  .head-a h2 { font: 700 26px/1 var(--f-head); letter-spacing: -.02em; }
+  .head-a .acts { margin-left: auto; display: flex; gap: var(--sp-2); }
+  .hint { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; }
+  .form-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--sp-4); }
+  .check { display: flex; align-items: center; gap: var(--sp-2); font: 400 var(--fs-2)/1 var(--f-mono); color: var(--sec); }
+  .check input { accent-color: var(--cyan); }
+  #form[data-agent-type=codex] [data-only=claude], #form[data-agent-type=claude] [data-only=codex] { display: none; }
+  .tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+  .toolchip { position: relative; cursor: pointer; background: none; transition: color .15s, background .15s, border-color .15s; }
+  .toolchip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .toolchip:hover { background: var(--cyan-dim); }
+  .toolchip:has(input:checked) { color: var(--cyan); border-color: var(--line-strong); background: var(--cyan-dim); }
+  .toolchip.warn:has(input:checked) { color: var(--orange); border-color: rgba(var(--o-rgb), .5); background: var(--orange-dim); }
+  .toolchip:has(input:focus-visible) { outline: 1px solid var(--cyan); outline-offset: 2px; }
+  label.sub { margin-top: var(--sp-2); }
+  .log { font: 400 var(--fs-2)/1.7 var(--f-mono); color: var(--sec); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .log b { color: var(--cyan); font-weight: 400; } .log .e { color: var(--red); } .log .w { color: var(--orange); }
+  tr[data-run] { cursor: pointer; } tr.sel td { background: var(--cyan-dim); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header id="top"></header>
+  <main class="main">
+    <section class="panel">
+      <div class="panel-h"><span class="eyebrow">Agents</span><button class="btn" data-new style="padding:6px 12px">+ New</button></div>
+      <div class="panel-b" style="padding:0" id="list"></div>
+    </section>
+
+    <div class="col">
+      <section class="panel" id="editor"></section>
+      <section class="panel">
+        <div class="panel-h"><span class="eyebrow">Run history</span><span class="meta" id="hist-meta"></span></div>
+        <div class="panel-b" id="history"></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel">
+        <div class="panel-h"><span class="eyebrow" id="rd-title">Run</span><span class="meta" id="rd-meta"></span></div>
+        <div class="panel-b" id="rd-tree"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-h"><span class="eyebrow">Run log</span><span class="meta">STREAM-JSON</span></div>
+        <div class="panel-b log" id="rd-log"></div>
+      </section>
+    </div>
+  </main>
+</div>
+<script type="module">
+import { state, subscribe, api, act, toast, browseFolder, mountShell, esc, ago, dur, tok, clock, agentState, runDuration, treeHtml } from '/app.js';
+mountShell('agents');
+const $ = id => document.getElementById(id);
+
+const presetCwd = new URLSearchParams(location.search).get('cwd'); // "New agent here" on the Projects page
+let selected = null, creating = !!presetCwd, runId = null, runData = null, draft = null;
+const chip = type => `<span class="chip ${type}">${esc(type)}</span>`;
+const STATUS = { running: 'cyan', queued: 'cyan', done: '', waiting: 'gold', failed: 'red', stopped: '' };
+const fmtDate = ts => new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+function renderList(s) {
+  $('list').innerHTML = s.agents.length ? s.agents.map(a => {
+    const st = agentState(a, s);
+    return `<div class="row ${a.id === selected && !creating ? 'sel' : ''}" data-agent="${esc(a.id)}"><span class="dot ${st === 'idle' ? '' : st === 'approval' ? 'approval' : st === 'waiting' ? 'waiting' : 'running'}"></span>
+      <div><div class="nm">${esc(a.name).toUpperCase()} ${chip(a.type)}</div><div class="sub">${a.schedule ? esc(a.schedule) : 'manual only'} · ${esc(a.cwd)}${a.priority !== 'normal' ? ` · ${esc(a.priority)} priority` : ''}</div></div>
+      <div class="nx">${!a.enabled ? 'PAUSED' : a.deferred_until ? `<span style="color:var(--orange)">RETRY<br>${clock(a.deferred_until)}</span>` : a.next_run ? `NEXT<br>${clock(a.next_run)}` : ''}</div></div>`;
+  }).join('') : '<div class="empty">No agents yet.</div>';
+}
+
+const TOOLS = [
+  { name: 'Read', tip: 'Read files' },
+  { name: 'Grep', tip: 'Search file contents' },
+  { name: 'Glob', tip: 'Find files by name' },
+  { name: 'Edit', tip: 'Change existing files' },
+  { name: 'Write', tip: 'Create or overwrite files' },
+  { name: 'WebFetch', tip: 'Fetch a web page' },
+  { name: 'WebSearch', tip: 'Search the web' },
+  { name: 'Bash', tip: 'Run ANY shell command. For single commands use a pattern such as Bash(npm test) below.', warn: true },
+];
+const toolBadges = active => `<div class="tools" role="group" aria-labelledby="l-tools">${TOOLS.map(t => `<label class="chip toolchip ${t.warn ? 'warn' : ''}" title="${esc(t.tip)}"><input type="checkbox" name="tool" value="${t.name}" ${active.includes(t.name) ? 'checked' : ''}>${t.name}</label>`).join('')}</div>`;
+const MODE_LIST = [['manual', 'Manual'], ['acceptEdits', 'Accept edits'], ['plan', 'Plan mode'], ['auto', 'Auto mode']];
+const MODE_HINT = {
+  manual: 'Only the allowed tools run. Anything else is denied and the agent asks in the inbox.',
+  acceptEdits: 'File edits run without asking. Other tools still need to be allowed (or approved in the inbox).',
+  plan: 'The agent only reads and writes a plan. It changes nothing in the project. The plan file is stored under ~/.claude/plans.',
+  auto: 'Claude decides itself which actions are safe, without a list. Needs an account that supports auto mode; the checks may use part of your usage.',
+};
+const MODE_HINT_CODEX = {
+  manual: 'Read-only sandbox: the agent can look at the project but cannot change it.',
+  acceptEdits: 'Workspace-write sandbox: the agent can change files in the project folder.',
+  plan: 'Read-only sandbox plus the instruction to only analyse and answer with a plan. Codex has no plan mode of its own.',
+};
+const modeHint = (type, mode) => (type === 'codex' ? MODE_HINT_CODEX : MODE_HINT)[mode] ?? '';
+let tab = 'role';
+const showTab = () => {
+  document.querySelectorAll('[data-pane]').forEach(el => { el.hidden = el.dataset.pane !== tab; });
+  document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+};
+const MODELS = ['', 'fable', 'opus', 'sonnet', 'haiku'];
+const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
+function modelField(model) {
+  const custom = !!model && !MODELS.includes(model);
+  return `<select class="input" id="f-model" name="model">${MODELS.map(m => `<option value="${m}" ${m ? 'data-only="claude"' : ''} ${!custom && (model || '') === m ? 'selected' : ''}>${m || 'default'}${m === 'fable' ? ' (needs usage credits)' : ''}</option>`).join('')}<option value="__custom" ${custom ? 'selected' : ''}>Custom…</option></select>
+    <input class="input" id="f-model-custom" name="model_custom" value="${esc(custom ? model : '')}" placeholder="claude-opus-5-5" style="margin-top:8px;font-family:var(--f-mono)" ${custom ? 'required' : 'hidden'}>`;
+}
+document.addEventListener('change', e => {
+  if (e.target.id !== 'f-model') return;
+  const c = $('f-model-custom'); c.hidden = e.target.value !== '__custom'; c.required = !c.hidden;
+  if (!c.hidden) c.focus();
+});
+
+function renderEditor(s) {
+  const a = creating ? { id: null, name: '', type: 'claude', mode: 'manual', role: '', prompt: '', cwd: presetCwd ?? '', schedule: '', allowed_tools: ['Read'], model: '', effort: '', enabled: true, memory: false, priority: 'normal' } : s.agents.find(x => x.id === selected);
+  if (!a) { $('editor').innerHTML = '<div class="empty">Select an agent or create a new one.</div>'; return; }
+  const d = draft && draft.for === (a.id ?? 'new') ? draft : null; // keep unsaved edits across live updates
+  const v = (k, fallback) => esc(d ? d[k] : fallback);
+  const st = a.id ? agentState(a, s) : null, live = st === 'running';
+  $('editor').innerHTML = `<div class="head-a">${a.id ? `<span class="dot ${st === 'idle' ? '' : st === 'approval' ? 'approval' : st === 'waiting' ? 'waiting' : 'running'}"></span><h2>${esc(a.name).toUpperCase()}</h2>${chip(a.type)}<span class="chip ${live ? 'cyan' : ''}">${esc(st)}</span>` : '<h2>NEW AGENT</h2>'}
+    <div class="acts">${a.id ? `<button class="btn" data-runnow ${live || !a.prompt ? 'disabled' : ''} ${a.prompt ? '' : 'title="No routine prompt. Give this agent work in Chat or Tasks, or add a routine prompt."'}>Run now</button>${live ? '<button class="btn red" data-stop>Stop</button>' : ''}` : ''}</div></div>
+    <form class="form" id="form" autocomplete="off" data-agent-type="${d ? d.type : a.type}">
+      <div class="field wide"><div class="toggle">${[['role', 'Role'], ['routine', 'Routine']].map(([k, label]) => `<button type="button" class="btn ${tab === k ? 'on' : ''}" data-tab="${k}">${label}</button>`).join('')}</div></div>
+      <div class="field" data-pane="role"><label for="f-name">Name</label><input class="input" id="f-name" name="name" value="${v('name', a.name)}" ${a.id ? 'readonly title="The name is the id and cannot change"' : ''}></div>
+      <div class="field" data-pane="role"><label>Type</label><div class="toggle">${['claude', 'codex', 'ollama'].map(t => `<button type="button" class="btn ${(d ? d.type : a.type) === t ? 'on' : ''}" data-type="${t}" ${t === 'ollama' ? 'disabled title="Adapter not built yet"' : ''}>${t}</button>`).join('')}</div></div>
+      <div class="field wide" data-pane="role"><label for="f-role">Role</label><textarea class="input" id="f-role" name="role" rows="5" placeholder="You are the reviewer of this project. You check changes against project.md and never touch the database.">${v('role', a.role ?? '')}</textarea>
+        <span class="hint">Applies to every run of this agent: chat, tasks, routines. The actual work comes from Chat or Tasks.</span></div>
+      <div class="field" data-pane="role"><label for="f-cwd">Working directory</label><div class="pathrow"><input class="input" id="f-cwd" name="cwd" value="${v('cwd', a.cwd)}" placeholder="D:\\Workspace\\my-project"><button class="btn" type="button" data-browse>Browse…</button></div></div>
+      <div class="field wide" data-pane="role" data-only="claude"><label id="l-tools">Allowed tools</label>${toolBadges(d ? d.allowed_tools : a.allowed_tools)}
+        <label for="f-tools" class="sub">More patterns (one per line)</label><textarea class="input" id="f-tools" name="tools" rows="2" style="font-family:var(--f-mono)" placeholder="Bash(npm test)&#10;mcp__server__tool">${d ? esc(d.tools) : esc(a.allowed_tools.filter(t => !TOOLS.some(p => p.name === t)).join('\n'))}</textarea>
+        <span class="hint">In manual mode everything else is denied. Read-only shell commands such as <code>echo</code> may still run. An agent can ask for more in the inbox.</span></div>
+      <div class="field wide" data-pane="role"><label>Permission mode</label><div class="toggle" role="group" aria-label="Permission mode">${MODE_LIST.map(([k, label]) => `<button type="button" class="btn ${(d ? d.mode : a.mode) === k ? 'on' : ''}" data-mode="${k}" ${k === 'auto' ? 'data-only="claude"' : ''} title="${esc(MODE_HINT[k])}">${label}</button>`).join('')}</div>
+        <span class="hint" id="mode-hint">${esc(modeHint(d ? d.type : a.type, d ? d.mode : a.mode))}</span></div>
+      <div class="field wide" data-pane="role" data-only="codex"><span class="hint">Codex agents have no tool list, no effort setting and no memory graph yet, and cannot ask questions in the inbox. Chat, tasks and the permission modes above work.</span></div>
+      <div class="field" data-pane="role"><label for="f-model">Model</label>${modelField(d ? d.model : a.model)}
+        <span class="hint" data-only="claude">Aliases always point to the newest model of that family. The CLI has no model list; use Custom for a full model name.</span></div>
+      <div class="field" data-pane="role" data-only="claude"><label for="f-effort">Effort</label><select class="input" id="f-effort" name="effort">${EFFORTS.map(e => `<option value="${e}" ${(d ? d.effort : a.effort) === e || (!(d ? d.effort : a.effort) && !e) ? 'selected' : ''}>${e || 'default'}</option>`).join('')}</select>
+        <span class="hint">Thinking depth. Higher effort uses more of your usage window.</span></div>
+      <div class="field" data-pane="role" data-only="claude"><label>Context</label><label class="check"><input type="checkbox" name="memory" ${(d ? d.memory : a.memory) ? 'checked' : ''}> memory graph of the working directory</label>
+        <span class="hint">The agent can query the Graphify graph instead of searching files. Build it on the Memory page first.</span></div>
+      <div class="field wide" data-pane="routine"><label for="f-prompt">Routine prompt</label><textarea class="input" id="f-prompt" name="prompt" rows="4" placeholder="Check open pull requests and report new ones in the inbox.">${v('prompt', a.prompt ?? '')}</textarea>
+        <span class="hint">What the agent does when it runs without a message from you: on its schedule and on Run now. Leave empty for an agent that only works on request.</span></div>
+      <div class="field" data-pane="routine"><label for="f-schedule">Schedule (cron)</label><input class="input" id="f-schedule" name="schedule" value="${v('schedule', a.schedule ?? '')}" placeholder="0 9 * * 1-5"></div>
+      <div class="field" data-pane="routine"><label>Status</label><label class="check"><input type="checkbox" name="enabled" ${(d ? d.enabled : a.enabled) ? 'checked' : ''}> scheduled runs enabled</label></div>
+      <div class="field" data-pane="routine"><label for="f-priority">Priority under load</label><select class="input" id="f-priority" name="priority">${['low', 'normal', 'high'].map(p => `<option ${(d ? d.priority : a.priority) === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+        <span class="hint">The limit guard holds scheduled runs back near the usage limit: high may use 10 points more of the window, low stops 15 points earlier.</span></div>
+      <div class="form-foot"><button class="btn solid" type="submit">${a.id ? 'Save' : 'Create agent'}</button>${a.id ? '<button class="btn red" type="button" data-delete>Delete</button>' : ''}<span class="hint" id="form-msg"></span></div>
+    </form>`;
+  showTab();
+}
+
+function renderHistory(s) {
+  const runs = selected && !creating ? s.runs.filter(r => r.agent_id === selected) : [];
+  $('hist-meta').textContent = runs.length ? `${runs.length} RUNS` : '';
+  $('history').innerHTML = runs.length ? `<table class="table"><thead><tr><th>Run</th><th>Trigger</th><th>Started</th><th>Duration</th><th>Subagents</th><th>Tokens</th><th>Result</th></tr></thead><tbody>${runs.map(r => `<tr data-run="${r.id}" class="${r.id === runId ? 'sel' : ''}">
+    <td>#${r.id}</td><td>${esc(r.trigger)}</td><td>${r.started_at ? fmtDate(r.started_at) : '—'}</td><td>${r.started_at ? dur(runDuration(r)) : '—'}</td><td>${s.subagents[r.id]?.length ?? '—'}</td><td>${tok(r.tokens)}</td>
+    <td><span class="chip ${STATUS[r.status] ?? ''}" title="${esc(r.error ?? '')}">${esc(r.status)}</span></td></tr>`).join('')}</tbody></table>` : '<div class="empty">No runs yet.</div>';
+}
+
+function renderRun(s) {
+  const run = s.runs.find(r => r.id === runId);
+  if (!run) { $('rd-title').textContent = 'Run'; $('rd-meta').textContent = ''; $('rd-tree').innerHTML = '<div class="empty">Select a run.</div>'; $('rd-log').innerHTML = ''; return; }
+  $('rd-title').textContent = `Run #${run.id} · subagents`;
+  $('rd-meta').textContent = `${dur(runDuration(run))} · ${tok(run.tokens)} TOK`;
+  $('rd-tree').innerHTML = treeHtml(run, s.subagents[run.id] ?? runData?.subagents ?? []) +
+    (run.error ? `<dl class="kv" style="margin-top:var(--sp-4)"><dt>Error</dt><dd style="color:var(--red);overflow-wrap:anywhere">${esc(run.error)}</dd></dl>` : '') +
+    (run.result_text ? `<dl class="kv" style="margin-top:var(--sp-4)"><dt>Result</dt><dd style="overflow-wrap:anywhere;font-family:var(--f-body)">${esc(run.result_text)}</dd></dl>` : '');
+  const ev = runData?.run.id === run.id ? runData.events : [];
+  $('rd-log').innerHTML = ev.filter(e => ['init', 'text', 'tool', 'tool_error', 'warning', 'subagent_start', 'subagent_end', 'result', 'internal_error', 'parse_error'].includes(e.kind)).map(e => {
+    const d = e.data, t = clock(e.ts);
+    switch (e.kind) {
+      case 'init': return `${t} <b>init</b> ${esc(d.model)} · session ${esc((d.session_id ?? '').slice(0, 8))}`;
+      case 'text': return `${t} ${esc(d.text)}`;
+      case 'tool': return `${t} <b>tool</b> ${esc(d.name)} ${esc(d.input.slice(0, 100))}`;
+      case 'tool_error': return `${t} <span class="e">denied/failed</span> ${esc(d.text.slice(0, 140))}`;
+      case 'subagent_start': return `${t} <b>subagent</b> ${esc(d.type)} · ${esc(d.description)}`;
+      case 'subagent_end': return `${t} <b>subagent done</b>${d.is_error ? ' <span class="e">(error)</span>' : ''}`;
+      case 'warning': case 'internal_error': case 'parse_error': return `${t} <span class="w">${e.kind}</span> ${esc(d.message ?? d.line ?? '')}`;
+      default: return `${t} <b>${e.kind}</b>${d.is_error ? ' <span class="e">error</span>' : ''}`;
+    }
+  }).join('\n') || (runData ? '' : 'loading…');
+}
+
+async function loadRun() {
+  if (!runId) return;
+  const id = runId;
+  const data = await api('GET', `/api/runs/${id}`);
+  if (id === runId) { runData = data; render(state); }
+}
+
+function render(s) {
+  if (!s.loaded) return;
+  if (!creating && !s.agents.some(a => a.id === selected)) selected = s.agents[0]?.id ?? null;
+  renderList(s); renderHistory(s); renderRun(s);
+  if (!document.activeElement?.closest('#form')) renderEditor(s); // never rebuild the form while the user is typing in it
+}
+subscribe(render);
+setInterval(() => { if (runId && state.runs.find(r => r.id === runId)?.status === 'running') act(loadRun); }, 4000);
+
+const formData = () => {
+  const f = new FormData($('form'));
+  return {
+    name: f.get('name'), role: f.get('role'), mode: document.querySelector('[data-mode].on')?.dataset.mode ?? 'manual', type: document.querySelector('[data-type].on')?.dataset.type ?? 'claude', prompt: f.get('prompt').trim(), cwd: f.get('cwd'),
+    schedule: f.get('schedule').trim() || null, model: (f.get('model') === '__custom' ? f.get('model_custom').trim() : f.get('model')) || null, effort: f.get('effort') || null, enabled: f.has('enabled'), memory: f.has('memory'), priority: f.get('priority'),
+    allowed_tools: [...new Set([...f.getAll('tool'), ...f.get('tools').split('\n').map(x => x.trim()).filter(Boolean)])],
+  };
+};
+document.addEventListener('input', e => { if (e.target.closest('#form')) { const f = formData(); draft = { for: creating ? 'new' : selected, ...f, tools: new FormData($('form')).get('tools') }; } });
+
+document.addEventListener('submit', e => {
+  e.preventDefault();
+  const body = formData();
+  act(async () => {
+    if (creating) { const { id } = await api('POST', '/api/agents', body); creating = false; selected = id; }
+    else await api('PUT', `/api/agents/${selected}`, body);
+    draft = null; toast('Saved', 'ok'); render(state); renderEditor(state);
+  });
+});
+
+document.addEventListener('click', async e => {
+  if (e.target.closest('[data-browse]')) {
+    const input = $('f-cwd'), p = await browseFolder(input.value.trim());
+    if (p) { input.value = p; input.dispatchEvent(new Event('input', { bubbles: true })); } // the input handler stores the draft
+    return;
+  }
+  const t = e.target.closest('[data-agent],[data-new],[data-run],[data-runnow],[data-stop],[data-delete],[data-type],[data-tab],[data-mode]');
+  if (!t) return;
+  if (t.dataset.agent) { selected = t.dataset.agent; creating = false; draft = null; runId = null; runData = null; render(state); renderEditor(state); }
+  else if (t.hasAttribute('data-new')) { creating = true; draft = null; render(state); renderEditor(state); }
+  else if (t.dataset.run) { runId = Number(t.dataset.run); runData = null; render(state); act(loadRun); }
+  else if (t.hasAttribute('data-runnow')) act(async () => {
+    const { run, guard } = await api('POST', `/api/agents/${selected}/run`, {});
+    runId = run.id; runData = null; render(state);
+    if (guard && !guard.ok) toast(`Started, but a scheduled run would be held back: ${guard.reason}.`, 'warn');
+  });
+  else if (t.hasAttribute('data-stop')) { const r = state.runs.find(x => x.agent_id === selected && ['running', 'queued'].includes(x.status)); if (r) act(() => api('POST', `/api/runs/${r.id}/stop`, {})); }
+  else if (t.hasAttribute('data-delete')) { if (confirm(`Delete agent "${selected}" and its run history?`)) act(async () => { await api('DELETE', `/api/agents/${selected}`); selected = null; render(state); renderEditor(state); }); }
+  else if (t.dataset.mode) {
+    document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b === t));
+    $('mode-hint').textContent = modeHint($('form').dataset.agentType, t.dataset.mode);
+    $('form').dispatchEvent(new Event('input', { bubbles: true })); // keep the unsaved choice in the draft
+  }
+  else if (t.dataset.tab) { tab = t.dataset.tab; showTab(); }
+  else if (t.dataset.type) {
+    document.querySelectorAll('button[data-type]').forEach(b => b.classList.toggle('on', b === t));
+    const form = $('form'); form.dataset.agentType = t.dataset.type;
+    if (t.dataset.type === 'codex') { // reset what Codex cannot do instead of saving it silently
+      if (document.querySelector('[data-mode].on')?.dataset.mode === 'auto') document.querySelector('[data-mode=manual]').click();
+      $('f-effort').value = ''; form.querySelector('[name=memory]').checked = false;
+      const m = $('f-model'); if (MODELS.includes(m.value) && m.value) m.value = '';
+    }
+    $('mode-hint').textContent = modeHint(t.dataset.type, document.querySelector('[data-mode].on')?.dataset.mode);
+    form.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+});
+</script>
+</body>
+</html>
