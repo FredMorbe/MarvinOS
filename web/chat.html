@@ -6,6 +6,7 @@
 <title>macii — Chat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/theme-boot.js"></script>
 <link rel="stylesheet" href="/hud.css">
 <link rel="stylesheet" href="/theme.css">
 <script>if (/[?&]embed(&|$)/.test(location.search)) document.documentElement.classList.add('embed'); // shown inside the Command page's chat modal</script>
@@ -22,13 +23,13 @@
   .pick .pp { font-size: var(--fs-1); letter-spacing: .04em; text-transform: none; opacity: .65; }
   .pickbar { position: relative; padding: var(--sp-3); border-bottom: 1px solid var(--line); }
   /* project filter: a listbox in the app style instead of the browser's native select */
-  .dd-btn { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); width: 100%; padding: 9px 12px; font: 400 12px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--txt); background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: border-color .25s, box-shadow .25s; }
+  .dd-btn { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); width: 100%; padding: 9px 12px; font: 400 12px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--txt); background: var(--shade-2); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: border-color .25s, box-shadow .25s; }
   .dd-btn:hover { border-color: var(--line-strong); }
   .dd-btn:focus-visible, .dd-btn[aria-expanded="true"] { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 12px rgba(var(--a-rgb), .2); }
   .dd-btn .dd-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dd-btn svg { flex: none; width: 12px; height: 12px; color: var(--cyan); transition: transform .2s; }
   .dd-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
-  .dd-list { position: absolute; left: var(--sp-3); right: var(--sp-3); top: calc(100% - var(--sp-3) + 6px); z-index: 20; margin: 0; padding: 6px; list-style: none; max-height: 280px; overflow: auto; background: rgba(13, 22, 38, .96); backdrop-filter: blur(14px); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 18px 40px -12px rgba(0,0,0,.7); }
+  .dd-list { position: absolute; left: var(--sp-3); right: var(--sp-3); top: calc(100% - var(--sp-3) + 6px); z-index: 20; margin: 0; padding: 6px; list-style: none; max-height: 280px; overflow: auto; background: var(--pop); backdrop-filter: blur(14px); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 18px 40px -12px rgba(0,0,0,.35); }
   .dd-list[hidden] { display: none; }
   .dd-opt { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: 9px 10px; border-radius: 8px; font: 400 12px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--sec); cursor: pointer; }
   .dd-opt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -53,7 +54,7 @@
   .pickrow.drop-before { box-shadow: inset 0 2px 0 var(--cyan); }
   .pickrow.drop-after { box-shadow: inset 0 -2px 0 var(--cyan); }
   .thread { display: grid; gap: var(--sp-3); padding: var(--sp-3) var(--sp-3) var(--sp-4); align-content: start; }
-  .bubble { padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); background: rgba(0,0,0,.25); max-width: 78ch; white-space: pre-wrap; overflow-wrap: anywhere; border-left: 2px solid var(--cyan); }
+  .bubble { padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); background: var(--shade-1); max-width: 78ch; white-space: pre-wrap; overflow-wrap: anywhere; border-left: 2px solid var(--cyan); }
   .bubble.me { margin-left: auto; border-left-color: var(--line); border-color: var(--line-strong); background: var(--cyan-dim); }
   .bubble.err { border-left-color: var(--red); }
   .bubble .who { font: 400 var(--fs-1)/1 var(--f-mono); letter-spacing: .16em; color: var(--sec); margin-bottom: 6px; display: block; text-transform: uppercase; }
@@ -73,14 +74,14 @@
   .pics { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
   .pics:empty { display: none; }
   .line .pics { padding-left: 0; }
-  .pic { display: block; padding: 0; line-height: 0; background: rgba(0,0,0,.35); border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; cursor: zoom-in; transition: border-color .2s; }
+  .pic { display: block; padding: 0; line-height: 0; background: var(--shade-2); border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; cursor: zoom-in; transition: border-color .2s; }
   .pic:hover, .pic:focus-visible { border-color: var(--cyan); outline: none; }
   .pic img { display: block; max-width: min(100%, 420px); max-height: 260px; object-fit: contain; }
   .thumbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
   .thumbs:empty { display: none; }
   .thumb { position: relative; line-height: 0; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
   .thumb img { display: block; height: 56px; max-width: 120px; object-fit: cover; }
-  .thumb button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; display: grid; place-items: center; padding: 0; font: 700 12px/1 var(--f-mono); color: var(--txt); background: rgba(0,0,0,.7); border: 0; border-radius: 50%; cursor: pointer; }
+  .thumb button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; display: grid; place-items: center; padding: 0; font: 700 12px/1 var(--f-mono); color: #fff; background: rgba(0,0,0,.7); border: 0; border-radius: 50%; cursor: pointer; }
   .thumb button:hover { background: var(--red); color: #fff; }
   .composer.filedrop { outline: 1px dashed var(--cyan); outline-offset: -4px; }
   .lightbox { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: var(--sp-4); background: rgba(2, 6, 12, .9); cursor: zoom-out; }

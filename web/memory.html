@@ -6,6 +6,7 @@
 <title>macii — Memory</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/theme-boot.js"></script>
 <link rel="stylesheet" href="/hud.css">
 <link rel="stylesheet" href="/theme.css">
 <style>
@@ -15,9 +16,9 @@
   .ov { position: absolute; }
   .ov.top-l { top: var(--sp-3); left: var(--sp-4); pointer-events: none; }
   .ov.center { inset: 0; display: grid; place-items: center; pointer-events: none; text-align: center; color: var(--sec); }
-  .ov.center .box { max-width: 380px; padding: var(--sp-4); background: rgba(7, 13, 22, .8); border: 1px solid var(--line); pointer-events: auto; }
-  .ov.bot-c { bottom: var(--sp-4); left: 50%; transform: translateX(-50%); display: flex; gap: var(--sp-4); align-items: center; padding: var(--sp-2) var(--sp-4); border: 1px solid var(--line); background: rgba(4,10,16,.75); font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .08em; white-space: nowrap; }
-  .tip { position: absolute; z-index: 5; padding: 6px 8px; font: 400 var(--fs-2)/1.4 var(--f-mono); background: rgba(4,10,16,.92); border: 1px solid var(--line-strong); pointer-events: none; white-space: nowrap; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+  .ov.center .box { max-width: 380px; padding: var(--sp-4); background: var(--pop-soft); border: 1px solid var(--line); pointer-events: auto; }
+  .ov.bot-c { bottom: var(--sp-4); left: 50%; transform: translateX(-50%); display: flex; gap: var(--sp-4); align-items: center; padding: var(--sp-2) var(--sp-4); border: 1px solid var(--line); background: var(--pop); font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .08em; white-space: nowrap; }
+  .tip { position: absolute; z-index: 5; padding: 6px 8px; font: 400 var(--fs-2)/1.4 var(--f-mono); background: var(--pop); border: 1px solid var(--line-strong); pointer-events: none; white-space: nowrap; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
   .tip b { color: var(--cyan); font-weight: 500; }
   .comm { display: grid; grid-template-columns: 14px 1fr auto; gap: var(--sp-3); align-items: center; padding: 8px var(--sp-4); cursor: pointer; font: 400 12px/1.2 var(--f-mono); letter-spacing: .06em; transition: background .15s, opacity .15s; }
   .comm:hover { background: var(--cyan-dim); }
@@ -32,7 +33,7 @@
   .opt { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); font: 400 var(--fs-2)/1.2 var(--f-mono); color: var(--sec); cursor: pointer; }
   .opt input { accent-color: var(--cyan); }
   select.input { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--sec) 50%), linear-gradient(135deg, var(--sec) 50%, transparent 50%); background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 30px; }
-  select.input option { background: #0d1626; }
+  select.input option { background: var(--surface); }
   .hint { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; overflow-wrap: anywhere; }
   .err { color: var(--red); }
   .empty-state { padding: var(--sp-5) var(--sp-4); text-align: center; color: var(--sec); font-size: var(--fs-2); }

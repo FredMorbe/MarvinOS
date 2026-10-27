@@ -9,13 +9,13 @@
   let th = {};
   const readTheme = () => {
     const s = getComputedStyle(document.documentElement), v = n => s.getPropertyValue(n).trim();
-    th = { a: v('--a-rgb'), r: v('--r-rgb'), g: v('--g-rgb'), idle: v('--idle-rgb'), h: parseFloat(v('--node-h')), sp: parseFloat(v('--node-spread')), sat: v('--node-sat'), head: v('--f-head'), mono: v('--f-mono') };
+    th = { a: v('--a-rgb'), r: v('--r-rgb'), g: v('--g-rgb'), idle: v('--idle-rgb'), h: parseFloat(v('--node-h')), sp: parseFloat(v('--node-spread')), sat: v('--node-sat'), l: v('--node-l') || '62%', head: v('--f-head'), mono: v('--f-mono') };
   };
   const col = {
     cyan: a => `rgba(${th.a},${a})`,
     red: a => `rgba(${th.r},${a})`,
     gold: a => `rgba(${th.g},${a})`,
-    node: (h, a) => `hsla(${th.h + (h - 190) * th.sp},${th.sat},62%,${a})`,
+    node: (h, a) => `hsla(${th.h + (h - 190) * th.sp},${th.sat},${th.l},${a})`,
   };
   const STATE_COL = { running: a => col.cyan(a), waiting: a => col.red(a), approval: a => col.gold(a), idle: a => `rgba(${th.idle},${a})` };
 

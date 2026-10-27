@@ -6,6 +6,7 @@
 <title>macii — Inbox</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/theme-boot.js"></script>
 <link rel="stylesheet" href="/hud.css">
 <link rel="stylesheet" href="/theme.css">
 <style>
@@ -14,7 +15,7 @@
   .filter:hover { background: var(--cyan-dim); color: var(--txt); }
   .filter.on { color: var(--cyan); box-shadow: inset 2px 0 0 var(--cyan); background: var(--cyan-dim); }
   .filter b { font: 500 var(--fs-2)/1 var(--f-mono); }
-  .bubble { padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); background: rgba(0,0,0,.25); max-width: 78ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .bubble { padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); background: var(--shade-1); max-width: 78ch; white-space: pre-wrap; overflow-wrap: anywhere; }
   .bubble.agent { border-left: 2px solid var(--red); }
   .bubble.a { border-left-color: var(--gold); } .bubble.w { border-left-color: var(--orange); } .bubble.r { border-left-color: var(--cyan); }
   .bubble.me { margin-left: auto; border-color: var(--line-strong); background: var(--cyan-dim); }
@@ -29,7 +30,7 @@
   .perm-box { border: 1px solid rgba(var(--g-rgb), .4); background: var(--gold-dim); padding: var(--sp-3) var(--sp-4); max-width: 78ch; }
   .perm-box .chip { margin: 4px 4px 0 0; }
   .perm-box .eyebrow { display: flex; margin-bottom: 6px; }
-  .log { font: 400 var(--fs-2)/1.7 var(--f-mono); color: var(--sec); border: 1px solid var(--line); background: rgba(0,0,0,.3); padding: var(--sp-3); max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .log { font: 400 var(--fs-2)/1.7 var(--f-mono); color: var(--sec); border: 1px solid var(--line); background: var(--shade-1); padding: var(--sp-3); max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
   .log b { color: var(--cyan); font-weight: 400; } .log .e { color: var(--red); } .log .w { color: var(--orange); }
 </style>
 </head>

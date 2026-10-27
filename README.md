@@ -39,3 +39,5 @@ Memory graphs additionally need Graphify (Windows, needs `uv` and `git`): `npm r
 - Voice control; Electron shell has no tray/background mode and no installer yet.
 
 `mockups/` holds the original static design explorations (7 styles); the app uses the Katsumii style (`web/theme.css`).
+
+**Light / dark mode and accent colour:** Settings > Appearance (Light, Dark, System, plus a colour picker and presets). The choice is stored per browser / desktop app in `localStorage` (`macii.theme`) and applied before the first paint by `web/theme-boot.js`, which every page loads. Colours are CSS variables: the dark values are the defaults in `theme.css`, the light ones sit in its `[data-theme="light"]` block; new UI should use the variables (`--shade-*`, `--pop`, `--on-accent`, …) and no fixed colours. An accent that would be unreadable on the current background (below 4.5:1) is darkened or lightened for display; the picked colour itself is kept. Red/yellow/orange keep their meaning in both modes. The logo has a light variant (`web/logo-h-light.png`).

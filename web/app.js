@@ -231,7 +231,7 @@ export function mountShell(active) {
   if (!document.querySelector('link[rel=icon]')) document.head.insertAdjacentHTML('beforeend', '<link rel="icon" type="image/png" href="/logo.png">');
   const top = document.getElementById('top');
   top.className = 'top';
-  top.innerHTML = `<a class="brand" href="/" aria-label="macii home"><img src="/logo-h.png" alt="macii"></a>
+  top.innerHTML = `<a class="brand" href="/" aria-label="macii home"><img class="logo-d" src="/logo-h.png" alt="macii"><img class="logo-l" src="/logo-h-light.png" alt="macii"></a>
     <nav class="tabs">${TABS.map(([id, label, href]) => `<a href="${href}" ${id === active ? 'class="on"' : ''}>${label}${id === 'inbox' ? ' <b class="badge red" id="badge" hidden></b>' : ''}</a>`).join('')}</nav>
     <div class="limits" id="limits"></div>
     <div class="clock"><span id="clock"></span><span id="conn"></span></div>`;

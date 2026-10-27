@@ -6,6 +6,7 @@
 <title>macii — Tasks</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/theme-boot.js"></script>
 <link rel="stylesheet" href="/hud.css">
 <link rel="stylesheet" href="/theme.css">
 <style>
@@ -16,7 +17,7 @@
   .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-4); padding: 0 var(--sp-4) var(--sp-4); align-items: start; }
   .col h3 { font: 400 var(--fs-1)/1 var(--f-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--sec); padding-bottom: var(--sp-3); display: flex; justify-content: space-between; }
   .col .stack { display: grid; gap: var(--sp-2); }
-  .tcard { text-align: left; width: 100%; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); background: rgba(0,0,0,.25); color: var(--txt); cursor: pointer; display: grid; gap: 6px; transition: border-color .15s, background .15s; }
+  .tcard { text-align: left; width: 100%; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); background: var(--shade-1); color: var(--txt); cursor: pointer; display: grid; gap: 6px; transition: border-color .15s, background .15s; }
   .tcard:hover { border-color: var(--line-strong); }
   .tcard.sel { border-color: var(--cyan); background: var(--cyan-dim); }
   .tcard.failed { border-left: 2px solid var(--red); }
@@ -32,7 +33,7 @@
   .check input { accent-color: var(--cyan); width: 16px; height: 16px; }
   .acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
   .hint { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; overflow-wrap: anywhere; }
-  .result { border: 1px solid var(--line); background: rgba(0,0,0,.3); padding: var(--sp-3); font: 400 var(--fs-2)/1.6 var(--f-mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+  .result { border: 1px solid var(--line); background: var(--shade-1); padding: var(--sp-3); font: 400 var(--fs-2)/1.6 var(--f-mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
   .result.err { border-color: var(--red); color: var(--red); }
   .head-d { padding: var(--sp-2) var(--sp-4) var(--sp-3); display: flex; gap: var(--sp-3); align-items: center; }
   .head-d h2 { font: 700 18px/1.2 var(--f-head); letter-spacing: -.01em; overflow-wrap: anywhere; }

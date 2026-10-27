@@ -6,6 +6,7 @@
 <title>macii — Command Center</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/theme-boot.js"></script>
 <link rel="stylesheet" href="/hud.css">
 <link rel="stylesheet" href="/theme.css">
 <style>
@@ -27,15 +28,15 @@
   .stat small { display: block; margin-top: 3px; font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .1em; }
   .demo { margin-top: var(--sp-2); display: inline-block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
   .ov.center { inset: 0; display: grid; place-items: end center; padding-bottom: 18%; pointer-events: none; text-align: center; color: var(--sec); }
-  .ov.center .box { max-width: 360px; padding: var(--sp-3) var(--sp-4); background: rgba(7, 13, 22, .8); border: 1px solid var(--line); pointer-events: auto; font-size: var(--fs-2); }
+  .ov.center .box { max-width: 360px; padding: var(--sp-3) var(--sp-4); background: var(--pop-soft); border: 1px solid var(--line); pointer-events: auto; font-size: var(--fs-2); }
   .ov.center a { color: var(--cyan); }
   .legend { display: grid; gap: 6px; font: 400 var(--fs-1)/1 var(--f-mono); color: var(--sec); letter-spacing: .06em; }
   .legend i { display: inline-block; width: 22px; margin-right: var(--sp-2); vertical-align: middle; border-top: 1px solid var(--cyan); }
   .legend i.dash { border-top-style: dashed; }
   .modes { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-3); pointer-events: auto; }
-  .modes .btn.on { background: var(--cyan); color: var(--bg); }
+  .modes .btn.on { background: var(--cyan); color: var(--on-accent); }
   .legend .ag { display: inline-block; width: 8px; height: 8px; margin-right: 8px; transform: rotate(45deg); }
-  .tip { position: absolute; z-index: 5; padding: 6px 8px; font: 400 var(--fs-2)/1.4 var(--f-mono); background: rgba(4,10,16,.92); border: 1px solid var(--line-strong); pointer-events: none; white-space: nowrap; }
+  .tip { position: absolute; z-index: 5; padding: 6px 8px; font: 400 var(--fs-2)/1.4 var(--f-mono); background: var(--pop); border: 1px solid var(--line-strong); pointer-events: none; white-space: nowrap; }
   .tip b { color: var(--cyan); font-weight: 500; }
   .feed { margin-top: var(--sp-2); font: 400 var(--fs-1)/1.6 var(--f-mono); color: var(--sec); max-width: 300px; }
   .feed div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -75,7 +76,7 @@
           <span><b class="ag" style="background:var(--cyan)"></b>running</span>
           <span><b class="ag" style="background:var(--red)"></b>waiting for answer</span>
           <span><b class="ag" style="background:var(--gold)"></b>needs approval</span>
-          <span><b class="ag" style="background:#8fa9b6"></b>idle</span></div></div>
+          <span><b class="ag" style="background:rgb(var(--idle-rgb))"></b>idle</span></div></div>
         <div class="tip" id="tip" hidden></div>
       </div>
     </section>

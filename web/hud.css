@@ -23,6 +23,7 @@
   --scan-o: 1;
   --node-h: 190; --node-spread: 1; --node-sat: 90%;
   --c-claude: #ff9f6b; --c-codex: #b9a6ff; --c-ollama: #7dffc4;
+  --on-accent: #031820; /* text on a solid accent fill; theme-boot.js picks black or white for the chosen accent */
 
   /* derived */
   --cyan: rgb(var(--a-rgb));
@@ -65,7 +66,7 @@ body::after {
   mix-blend-mode: multiply; opacity: var(--scan-o);
 }
 a { color: inherit; text-decoration: none; }
-::selection { background: var(--cyan); color: var(--bg); }
+::selection { background: var(--cyan); color: var(--on-accent); }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb { background: var(--line); }
 
@@ -90,7 +91,7 @@ a { color: inherit; text-decoration: none; }
 .tabs a.on { color: var(--cyan); border-bottom-color: var(--cyan); }
 .badge {
   display: inline-block; min-width: 18px; padding: 1px 5px; margin-left: var(--sp-1);
-  font: 700 var(--fs-2)/1.3 var(--f-mono); text-align: center; color: var(--bg); background: var(--cyan);
+  font: 700 var(--fs-2)/1.3 var(--f-mono); text-align: center; color: var(--on-accent); background: var(--cyan);
 }
 .badge.red { background: var(--red); color: #fff; animation: pulse-red 1.8s infinite; }
 .clock { font: 600 var(--fs-4)/1 var(--f-head); letter-spacing: .14em; font-variant-numeric: tabular-nums; text-align: right; }
@@ -163,21 +164,21 @@ a { color: inherit; text-decoration: none; }
 }
 .btn:hover { background: var(--cyan-dim); box-shadow: 0 0 10px rgba(var(--a-rgb),.25); }
 .btn:focus-visible { outline: 1px solid var(--txt); outline-offset: 2px; }
-.btn:active { background: var(--cyan); color: var(--bg); }
+.btn:active { background: var(--cyan); color: var(--on-accent); }
 .btn.red  { color: var(--red);  border-color: rgba(var(--r-rgb),.6); }
 .btn.red:hover  { background: var(--red-dim);  box-shadow: 0 0 10px rgba(var(--r-rgb),.3); }
 .btn.gold { color: var(--gold); border-color: rgba(var(--g-rgb),.6); }
 .btn.gold:hover { background: var(--gold-dim); box-shadow: 0 0 10px rgba(var(--g-rgb),.3); }
 .btn.orange { color: var(--orange); border-color: rgba(var(--o-rgb), .6); }
 .btn.orange:hover { background: var(--orange-dim); box-shadow: 0 0 10px rgba(var(--o-rgb), .3); }
-.btn.solid { background: var(--cyan); color: var(--bg); }
+.btn.solid { background: var(--cyan); color: var(--on-accent); }
 .btn:disabled { opacity: .4; cursor: not-allowed; }
 
 .field { display: grid; gap: 5px; }
 .field label { font: 600 var(--fs-1)/1 var(--f-head); letter-spacing: .22em; text-transform: uppercase; color: var(--sec); }
 .input {
   width: 100%; padding: 8px 10px; font: 400 var(--fs-3)/1.4 var(--f-mono); color: var(--txt);
-  background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 0;
+  background: var(--shade-2); border: 1px solid var(--line); border-radius: 0;
   transition: border-color .15s, box-shadow .15s;
 }
 .input:hover { border-color: var(--line-strong); }
@@ -272,7 +273,7 @@ textarea.input { resize: vertical; min-height: 64px; font-family: var(--f-body);
 
 /* toast (app.js) */
 .toast { position: fixed; right: 16px; bottom: 32px; z-index: 80; max-width: 420px; padding: 10px 14px; font: 400 var(--fs-3)/1.4 var(--f-body); color: var(--txt);
-  background: rgba(7, 13, 22, .96); border: 1px solid var(--red); box-shadow: 0 8px 30px rgba(0, 0, 0, .5); }
+  background: var(--pop); border: 1px solid var(--red); box-shadow: 0 8px 30px rgba(0, 0, 0, .35); }
 .toast.ok { border-color: var(--cyan); }
 .empty { padding: var(--sp-5) var(--sp-4); color: var(--sec); font-size: var(--fs-3); text-align: center; }
 .empty a { color: var(--cyan); }
@@ -297,7 +298,7 @@ textarea.input { resize: vertical; min-height: 64px; font-family: var(--f-body);
 .modal-quick { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 .modal-quick .chip { cursor: pointer; background: none; }
 .modal-quick .chip:hover { background: var(--cyan-dim); }
-.modal-list { flex: 1; min-height: 160px; overflow: auto; border: 1px solid var(--line); background: rgba(0, 0, 0, .25); }
+.modal-list { flex: 1; min-height: 160px; overflow: auto; border: 1px solid var(--line); background: var(--shade-1); }
 .modal-row { display: block; width: 100%; text-align: left; padding: 9px var(--sp-4); background: none; border: 0; color: var(--txt); font: 400 var(--fs-3)/1.3 var(--f-mono); cursor: pointer; overflow-wrap: anywhere; transition: background .15s, color .15s; }
 .modal-row:hover, .modal-row:focus-visible { background: var(--cyan-dim); color: var(--cyan); outline: none; }
 .modal-f .btn:first-of-type { margin-left: auto; }

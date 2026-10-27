@@ -8,7 +8,12 @@
   --txt: #eef2f7; --sec: #94a3b8; --dim: #64748b;
   --line: rgba(226, 232, 240, .08); --line-strong: rgba(var(--a-rgb), .3);
   --cut: 0px; --scan-o: 0; --grid-op: 0;
-  --node-h: 190; --node-spread: 1.25; --node-sat: 80%;
+  --node-h: 190; --node-spread: 1.25; --node-sat: 80%; --node-l: 62%;
+  /* surfaces that differ between the modes (the light values are in the [data-theme="light"] block at the end) */
+  --shade-1: rgba(0, 0, 0, .25); --shade-2: rgba(0, 0, 0, .35); /* inset areas: bubbles, logs, inputs */
+  --pop: rgba(8, 15, 26, .94); --pop-soft: rgba(7, 13, 22, .8); --surface: #0d1626; /* tooltips, menus, toasts / native option lists */
+  --top-bg: rgba(7, 13, 22, .72); --panel-a: rgba(30, 41, 59, .42); --panel-b: rgba(13, 22, 38, .24); --panel-shadow: none;
+  --noise-op: .05; --noise-filter: brightness(1.6);
   --f-head: 'DM Sans', 'Manrope', sans-serif; --f-body: 'Manrope', 'Segoe UI', sans-serif; --f-mono: 'DM Mono', ui-monospace, monospace;
 }
 :root body {
@@ -18,7 +23,7 @@
     var(--bg);
 }
 :root body::before { /* .v6-noise */
-  z-index: 2; opacity: .05; filter: brightness(1.6); background-size: auto;
+  z-index: 2; opacity: var(--noise-op); filter: var(--noise-filter); background-size: auto;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 :root a:focus-visible, :root button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
@@ -26,17 +31,20 @@
 /* .v6-card */
 :root .panel {
   clip-path: none; border-radius: 16px; overflow: hidden;
-  background: linear-gradient(165deg, rgba(30, 41, 59, .42), rgba(13, 22, 38, .24));
+  background: linear-gradient(165deg, var(--panel-a), var(--panel-b)); box-shadow: var(--panel-shadow);
   transition: border-color .35s ease;
 }
 :root .panel:hover { border-color: var(--line-strong); }
 :root .panel::before { display: none; }
 
 /* .v6-nav.scrolled + .v6-brand + .v6-nav-links */
-:root .top { background: rgba(7, 13, 22, .72); backdrop-filter: blur(14px); }
+:root .top { background: var(--top-bg); backdrop-filter: blur(14px); }
+:root .brand .logo-l { display: none; } /* the logo's lettering is white; the light mode has its own dark version */
+:root[data-theme="light"] .brand .logo-d { display: none; }
+:root[data-theme="light"] .brand .logo-l { display: block; }
 :root .brand { font: 700 20px/1 var(--f-head); letter-spacing: .01em; }
 :root .tabs a { font: 400 12px/1 var(--f-mono); letter-spacing: .14em; border-bottom: 0; transition: color .25s ease; }
-:root .tabs a:hover { color: #67e8f9; background: none; }
+:root .tabs a:hover { color: color-mix(in srgb, var(--cyan) 70%, var(--txt)); background: none; }
 :root .tabs a.on { color: var(--cyan); }
 
 /* .v6-eyebrow */
@@ -53,8 +61,8 @@
 :root .btn.gold:hover { background: var(--gold-dim); border-color: var(--gold); }
 :root .btn.orange { color: var(--orange); border-color: rgba(var(--o-rgb), .45); }
 :root .btn.orange:hover { background: var(--orange-dim); border-color: var(--orange); }
-:root .btn.solid { background: var(--cyan); color: #031820; border-color: transparent; }
-:root .btn.solid:hover, :root .btn.solid:active { background: #67e8f9; color: #031820; box-shadow: 0 8px 34px -8px rgba(var(--a-rgb), .5); }
+:root .btn.solid { background: var(--cyan); color: var(--on-accent); border-color: transparent; }
+:root .btn.solid:hover, :root .btn.solid:active { background: color-mix(in srgb, var(--cyan) 80%, white); color: var(--on-accent); box-shadow: 0 8px 34px -8px rgba(var(--a-rgb), .5); }
 
 /* .v6-card-chips li */
 :root .chip { font-size: 10px; letter-spacing: .1em; border-radius: 999px; padding: 3px 9px; }
@@ -74,3 +82,29 @@
 :root .meter, :root .meter i { border-radius: 4px; }
 :root .theme-pick, :root .theme-pick button { border-radius: 999px; }
 
+:root { color-scheme: dark; }
+
+/* ============ Light mode. theme-boot.js sets data-theme and the accent (--a-rgb, readable on this background).
+   Status colours are the darker steps of the same hues: the dark-mode ones would be too pale on white. ============ */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --r-rgb: 225, 29, 72; --g-rgb: 161, 98, 7; --o-rgb: 194, 65, 12; --idle-rgb: 100, 116, 139;
+  --c-claude: #c2570c; --c-codex: #6d4fd6; --c-ollama: #0f8a5f;
+  --bg: #f4f6fa; --bg-glow: #f4f6fa;
+  --glass: rgba(255, 255, 255, .7); --glass-2: rgba(255, 255, 255, .85);
+  --txt: #0f172a; --sec: #475569; --dim: #64748b;
+  --line: rgba(15, 23, 42, .12); --line-strong: rgba(var(--a-rgb), .55);
+  --node-l: 42%;
+  --shade-1: rgba(15, 23, 42, .045); --shade-2: rgba(255, 255, 255, .8);
+  --pop: rgba(255, 255, 255, .97); --pop-soft: rgba(255, 255, 255, .88); --surface: #ffffff;
+  --top-bg: rgba(244, 246, 250, .82); --panel-a: rgba(255, 255, 255, .88); --panel-b: rgba(255, 255, 255, .6);
+  --panel-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 12px 28px -16px rgba(15, 23, 42, .18);
+  --noise-op: .03; --noise-filter: none;
+}
+:root[data-theme="light"] body {
+  background:
+    radial-gradient(ellipse 85% 55% at 65% -8%, rgba(var(--a-rgb), .1), transparent 62%),
+    radial-gradient(ellipse 55% 45% at 6% 42%, rgba(var(--a-rgb), .05), transparent 60%),
+    var(--bg);
+}
+:root[data-theme="light"] .badge.red { color: #fff; }

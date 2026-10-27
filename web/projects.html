@@ -6,12 +6,13 @@
 <title>macii — Projects</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@500;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/theme-boot.js"></script>
 <link rel="stylesheet" href="/hud.css">
 <link rel="stylesheet" href="/theme.css">
 <style>
   .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); max-width: 1500px; width: 100%; margin: 0 auto; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: var(--sp-4); padding: var(--sp-2) var(--sp-4) var(--sp-4); align-content: start; align-items: start; }
-  .card { border: 1px solid var(--line); background: rgba(0,0,0,.25); padding: var(--sp-4); display: grid; gap: var(--sp-3); min-width: 0; }
+  .card { border: 1px solid var(--line); background: var(--shade-1); padding: var(--sp-4); display: grid; gap: var(--sp-3); min-width: 0; }
   .card.ask { border-color: rgba(var(--r-rgb), .6); }
   .card h2 { font: 700 20px/1.2 var(--f-head); letter-spacing: -.01em; overflow-wrap: anywhere; }
   .path { font: 400 var(--fs-1)/1.4 var(--f-mono); color: var(--sec); letter-spacing: .04em; overflow-wrap: anywhere; }
