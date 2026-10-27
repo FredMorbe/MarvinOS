@@ -11,6 +11,7 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server/index.js",
     "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\"",
+    "test:codex:live": "node tools/codex-smoke.mjs",
     "setup:graphify": "uv venv tools/graphify --python 3.13 && uv pip install --python tools/graphify/Scripts/python.exe \"graphifyy[leiden,mcp] @ git+https://github.com/Graphify-Labs/graphify@92741d162b2094ffc2fed58cfbd8ee823e9da62c\"",
     "app": "electron ."
   },

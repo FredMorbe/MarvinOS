@@ -1,6 +1,6 @@
 // Shared client: live state over WebSocket, REST helper, formatting, shell (header) for every page.
 
-export const state = { agents: [], runs: [], subagents: {}, inbox: [], limits: {}, activity: [], tasks: [], graphs: [], settings: null, notify: null, chat_pins: [], connected: false, loaded: false };
+export const state = { agents: [], runs: [], subagents: {}, inbox: [], limits: {}, accounts: { default: 'default', list: [{ id: 'default', name: 'Default', builtin: true, dir: null }] }, activity: [], tasks: [], graphs: [], settings: null, notify: null, chat_pins: [], connected: false, loaded: false };
 const activityListeners = new Set();
 export const onActivity = fn => activityListeners.add(fn);
 const listeners = new Set();
@@ -32,6 +32,7 @@ function apply({ type, data }) {
     case 'subagents': state.subagents[data.run_id] = data.items; break;
     case 'inbox': state.inbox = upsert(state.inbox, data, 200); break;
     case 'limits': state.limits = data; break;
+    case 'accounts': state.accounts = data; break;
     case 'graphs': state.graphs = data; break;
     case 'task': state.tasks = upsert(state.tasks, data, 500); break;
     case 'tasks': state.tasks = data; break;
@@ -219,6 +220,8 @@ export function treeHtml(run, subs) {
 // ---------- shell ----------
 const TABS = [['index', 'Command', '/'], ['inbox', 'Inbox', '/inbox.html'], ['projects', 'Projects', '/projects.html'], ['tasks', 'Tasks', '/tasks.html'], ['chat', 'Chat', '/chat.html'],['agents', 'Agents', '/agents.html'], ['memory', 'Memory', '/memory.html'], ['settings', 'Settings', '/settings.html']];
 const pct = u => (u == null ? null : Math.round(u * 100));
+/** key of an account's usage windows in state.limits (same rule as server/accounts.js) */
+export const limitKey = account => (!account || account === 'default' ? 'claude' : `claude:${account}`);
 /** `t` = the limit guard's threshold (0..1); drawn as a tick so you can see how close a run is to being held back */
 const meter = (label, u, t) => {
   const p = pct(u);
@@ -247,9 +250,18 @@ export function mountShell(active) {
   subscribe(s => {
     const n = openCount(s), badge = top.querySelector('#badge');
     badge.hidden = !n; badge.textContent = n;
-    const w = s.limits.claude?.windows;
     const gd = s.settings?.guard?.enabled ? s.settings.guard : null;
-    top.querySelector('#limits').innerHTML = meter('CLAUDE · 5H', w?.five_hour?.utilization, gd?.five_hour) + meter('CLAUDE · 7D', w?.seven_day?.utilization, gd?.seven_day) + meter('CODEX', null);
+    // one pair of meters per Claude account; with only the CLI login it stays "CLAUDE"
+    const many = s.accounts.list.length > 1;
+    const claude = s.accounts.list.map(a => {
+      const w = s.limits[limitKey(a.id)]?.windows;
+      return many
+        ? `<div class="acc-limit" title="${esc(a.name)}"><span class="acc-name">${esc(a.name.toUpperCase())}</span><div>${meter('5H', w?.five_hour?.utilization, gd?.five_hour)}${meter('7D', w?.seven_day?.utilization, gd?.seven_day)}</div></div>`
+        : meter('CLAUDE · 5H', w?.five_hour?.utilization, gd?.five_hour) + meter('CLAUDE · 7D', w?.seven_day?.utilization, gd?.seven_day);
+    }).join('');
+    const limits = top.querySelector('#limits');
+    limits.classList.toggle('many', many);
+    limits.innerHTML = claude + meter('CODEX', null);
     tick();
   });
 }

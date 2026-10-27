@@ -72,20 +72,28 @@
 </div>
 <script type="module">
 import { state, subscribe, api, act, toast, browseFolder, mountShell, esc, ago, dur, tok, clock, agentState, runDuration, treeHtml } from '/app.js';
+import { CLAUDE_MODELS, modelOptions, effortOptions } from '/model-options.js';
 mountShell('agents');
 const $ = id => document.getElementById(id);
 
 const presetCwd = new URLSearchParams(location.search).get('cwd'); // "New agent here" on the Projects page
 let selected = null, creating = !!presetCwd, runId = null, runData = null, draft = null;
+let codexStatus = 'Check the installed CLI and ChatGPT sign-in without sending a message.', codexChecking = false;
 const chip = type => `<span class="chip ${type}">${esc(type)}</span>`;
 const STATUS = { running: 'cyan', queued: 'cyan', done: '', waiting: 'gold', failed: 'red', stopped: '' };
 const fmtDate = ts => new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+/** name of the Claude account an agent runs on; only shown when there is more than one to tell apart */
+function accountName(a, s) {
+  if (a.type !== 'claude' || s.accounts.list.length < 2) return '';
+  return s.accounts.list.find(x => x.id === (a.account ?? s.accounts.default))?.name ?? a.account;
+}
 
 function renderList(s) {
   $('list').innerHTML = s.agents.length ? s.agents.map(a => {
     const st = agentState(a, s);
     return `<div class="row ${a.id === selected && !creating ? 'sel' : ''}" data-agent="${esc(a.id)}"><span class="dot ${st === 'idle' ? '' : st === 'approval' ? 'approval' : st === 'waiting' ? 'waiting' : 'running'}"></span>
-      <div><div class="nm">${esc(a.name).toUpperCase()} ${chip(a.type)}</div><div class="sub">${a.schedule ? esc(a.schedule) : 'manual only'} · ${esc(a.cwd)}${a.priority !== 'normal' ? ` · ${esc(a.priority)} priority` : ''}</div></div>
+      <div><div class="nm">${esc(a.name).toUpperCase()} ${chip(a.type)}</div><div class="sub">${a.schedule ? esc(a.schedule) : 'manual only'}${accountName(a, s) ? ` · ${esc(accountName(a, s))}` : ''} · ${esc(a.cwd)}${a.priority !== 'normal' ? ` · ${esc(a.priority)} priority` : ''}</div></div>
       <div class="nx">${!a.enabled ? 'PAUSED' : a.deferred_until ? `<span style="color:var(--orange)">RETRY<br>${clock(a.deferred_until)}</span>` : a.next_run ? `NEXT<br>${clock(a.next_run)}` : ''}</div></div>`;
   }).join('') : '<div class="empty">No agents yet.</div>';
 }
@@ -119,21 +127,58 @@ const showTab = () => {
   document.querySelectorAll('[data-pane]').forEach(el => { el.hidden = el.dataset.pane !== tab; });
   document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
 };
-const MODELS = ['', 'fable', 'opus', 'sonnet', 'haiku'];
-const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
-function modelField(model) {
-  const custom = !!model && !MODELS.includes(model);
-  return `<select class="input" id="f-model" name="model">${MODELS.map(m => `<option value="${m}" ${m ? 'data-only="claude"' : ''} ${!custom && (model || '') === m ? 'selected' : ''}>${m || 'default'}${m === 'fable' ? ' (needs usage credits)' : ''}</option>`).join('')}<option value="__custom" ${custom ? 'selected' : ''}>Custom…</option></select>
+let codexModels = [], modelsLoading = false, modelsLoaded = false, modelsError = '';
+const optionHtml = (o, selected) => `<option value="${esc(o.value)}" title="${esc(o.description ?? '')}" ${(selected || '') === o.value ? 'selected' : ''}>${esc(o.label)}</option>`;
+function modelField(model, type) {
+  const custom = type !== 'codex' && !!model && !CLAUDE_MODELS.includes(model);
+  return `<select class="input" id="f-model" name="model">${modelOptions(type, codexModels, model).map(o => optionHtml(o, custom ? '__custom' : model)).join('')}${type !== 'codex' ? `<option value="__custom" ${custom ? 'selected' : ''}>Custom…</option>` : ''}</select>
     <input class="input" id="f-model-custom" name="model_custom" value="${esc(custom ? model : '')}" placeholder="claude-opus-5-5" style="margin-top:8px;font-family:var(--f-mono)" ${custom ? 'required' : 'hidden'}>`;
 }
+function effortField(type, model, effort) {
+  const options = effortOptions(type, codexModels, model);
+  if (effort && !options.some(o => o.value === effort)) options.push({ value: effort, label: `${effort} (not supported by selected model)` });
+  return `<select class="input" id="f-effort" name="effort">${options.map(o => optionHtml(o, effort)).join('')}</select>`;
+}
+const catalogStatus = () => modelsLoading ? 'Loading models…' : modelsError || (modelsLoaded ? `${codexModels.length} models · Intelligence options follow the selected model.` : 'Load models from the installed Codex CLI.');
+function updateModelControls(model, effort) {
+  const type = $('form')?.dataset.agentType;
+  if (!type) return;
+  $('model-control').innerHTML = modelField(model, type);
+  $('effort-control').innerHTML = effortField(type, model, effort);
+  $('effort-label').textContent = type === 'codex' ? 'Intelligence' : 'Effort';
+}
+async function loadCodexModels() {
+  if (modelsLoading) return;
+  modelsLoading = true; modelsError = '';
+  const refreshStatus = () => {
+    if ($('models-status')) $('models-status').textContent = catalogStatus();
+    const button = document.querySelector('[data-refresh-models]'); if (button) button.disabled = modelsLoading;
+  };
+  refreshStatus();
+  try { codexModels = (await api('GET', '/api/adapters/codex/models')).models; modelsLoaded = true; }
+  catch (e) { modelsError = e.message; }
+  finally {
+    modelsLoading = false;
+    if ($('form')?.dataset.agentType === 'codex') {
+      const data = formData(); updateModelControls(data.model, data.effort);
+    }
+    refreshStatus();
+  }
+}
 document.addEventListener('change', e => {
-  if (e.target.id !== 'f-model') return;
-  const c = $('f-model-custom'); c.hidden = e.target.value !== '__custom'; c.required = !c.hidden;
-  if (!c.hidden) c.focus();
+  if (e.target.id === 'f-model') {
+    const c = $('f-model-custom'); c.hidden = e.target.value !== '__custom'; c.required = !c.hidden;
+    if (!c.hidden) c.focus();
+    const type = $('form').dataset.agentType;
+    const options = effortOptions(type, codexModels, e.target.value);
+    const effort = $('f-effort').value;
+    $('effort-control').innerHTML = effortField(type, e.target.value, options.some(o => o.value === effort) ? effort : '');
+  }
+  if (e.target.closest('#form')) $('form').dispatchEvent(new Event('input', { bubbles: true }));
 });
 
 function renderEditor(s) {
-  const a = creating ? { id: null, name: '', type: 'claude', mode: 'manual', role: '', prompt: '', cwd: presetCwd ?? '', schedule: '', allowed_tools: ['Read'], model: '', effort: '', enabled: true, memory: false, priority: 'normal' } : s.agents.find(x => x.id === selected);
+  const a = creating ? { id: null, name: '', type: 'claude', mode: 'manual', role: '', prompt: '', cwd: presetCwd ?? '', schedule: '', allowed_tools: ['Read'], model: '', effort: '', enabled: true, memory: false, priority: 'normal', account: null } : s.agents.find(x => x.id === selected);
   if (!a) { $('editor').innerHTML = '<div class="empty">Select an agent or create a new one.</div>'; return; }
   const d = draft && draft.for === (a.id ?? 'new') ? draft : null; // keep unsaved edits across live updates
   const v = (k, fallback) => esc(d ? d[k] : fallback);
@@ -152,11 +197,15 @@ function renderEditor(s) {
         <span class="hint">In manual mode everything else is denied. Read-only shell commands such as <code>echo</code> may still run. An agent can ask for more in the inbox.</span></div>
       <div class="field wide" data-pane="role"><label>Permission mode</label><div class="toggle" role="group" aria-label="Permission mode">${MODE_LIST.map(([k, label]) => `<button type="button" class="btn ${(d ? d.mode : a.mode) === k ? 'on' : ''}" data-mode="${k}" ${k === 'auto' ? 'data-only="claude"' : ''} title="${esc(MODE_HINT[k])}">${label}</button>`).join('')}</div>
         <span class="hint" id="mode-hint">${esc(modeHint(d ? d.type : a.type, d ? d.mode : a.mode))}</span></div>
-      <div class="field wide" data-pane="role" data-only="codex"><span class="hint">Codex agents have no tool list, no effort setting and no memory graph yet, and cannot ask questions in the inbox. Chat, tasks and the permission modes above work.</span></div>
-      <div class="field" data-pane="role"><label for="f-model">Model</label>${modelField(d ? d.model : a.model)}
+      <div class="field wide" data-pane="role" data-only="codex"><span class="hint">Codex supports model and Intelligence selection, chat, tasks and the permission modes above. Tool allowlists, memory graphs and inbox questions are not available yet.</span></div>
+      <div class="field wide" data-pane="role" data-only="codex"><button class="btn" type="button" data-check-codex ${codexChecking ? 'disabled' : ''}>${codexChecking ? 'Checking…' : 'Check Codex connection'}</button><span class="hint" id="codex-status" role="status" style="overflow-wrap:anywhere">${esc(codexStatus)}</span></div>
+      <div class="field" data-pane="role"><label for="f-model">Model</label><div id="model-control">${modelField(d ? d.model : a.model, d ? d.type : a.type)}</div>
         <span class="hint" data-only="claude">Aliases always point to the newest model of that family. The CLI has no model list; use Custom for a full model name.</span></div>
-      <div class="field" data-pane="role" data-only="claude"><label for="f-effort">Effort</label><select class="input" id="f-effort" name="effort">${EFFORTS.map(e => `<option value="${e}" ${(d ? d.effort : a.effort) === e || (!(d ? d.effort : a.effort) && !e) ? 'selected' : ''}>${e || 'default'}</option>`).join('')}</select>
+      <div class="field" data-pane="role"><label for="f-effort" id="effort-label">${(d ? d.type : a.type) === 'codex' ? 'Intelligence' : 'Effort'}</label><div id="effort-control">${effortField(d ? d.type : a.type, d ? d.model : a.model, d ? d.effort : a.effort)}</div>
         <span class="hint">Thinking depth. Higher effort uses more of your usage window.</span></div>
+      <div class="field wide" data-pane="role" data-only="codex"><button class="btn" type="button" data-refresh-models ${modelsLoading ? 'disabled' : ''}>Refresh models</button><span class="hint" id="models-status" role="status">${esc(catalogStatus())}</span></div>
+      ${s.accounts.list.length > 1 ? `<div class="field" data-pane="role" data-only="claude"><label for="f-account">Claude account</label><select class="input" id="f-account" name="account"><option value="">Default (${esc(s.accounts.list.find(x => x.id === s.accounts.default)?.name)})</option>${s.accounts.list.map(x => `<option value="${esc(x.id)}" ${(d ? d.account : a.account) === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
+        <span class="hint">The login this agent runs on, and whose usage window it draws on. A chat belongs to its account: after switching, start a new chat. Accounts are set up in Settings.</span></div>` : ''}
       <div class="field" data-pane="role" data-only="claude"><label>Context</label><label class="check"><input type="checkbox" name="memory" ${(d ? d.memory : a.memory) ? 'checked' : ''}> memory graph of the working directory</label>
         <span class="hint">The agent can query the Graphify graph instead of searching files. Build it on the Memory page first.</span></div>
       <div class="field wide" data-pane="routine"><label for="f-prompt">Routine prompt</label><textarea class="input" id="f-prompt" name="prompt" rows="4" placeholder="Check open pull requests and report new ones in the inbox.">${v('prompt', a.prompt ?? '')}</textarea>
@@ -168,6 +217,7 @@ function renderEditor(s) {
       <div class="form-foot"><button class="btn solid" type="submit">${a.id ? 'Save' : 'Create agent'}</button>${a.id ? '<button class="btn red" type="button" data-delete>Delete</button>' : ''}<span class="hint" id="form-msg"></span></div>
     </form>`;
   showTab();
+  if ((d ? d.type : a.type) === 'codex' && !modelsLoaded && !modelsLoading && !modelsError) void loadCodexModels();
 }
 
 function renderHistory(s) {
@@ -187,10 +237,11 @@ function renderRun(s) {
     (run.error ? `<dl class="kv" style="margin-top:var(--sp-4)"><dt>Error</dt><dd style="color:var(--red);overflow-wrap:anywhere">${esc(run.error)}</dd></dl>` : '') +
     (run.result_text ? `<dl class="kv" style="margin-top:var(--sp-4)"><dt>Result</dt><dd style="overflow-wrap:anywhere;font-family:var(--f-body)">${esc(run.result_text)}</dd></dl>` : '');
   const ev = runData?.run.id === run.id ? runData.events : [];
-  $('rd-log').innerHTML = ev.filter(e => ['init', 'text', 'tool', 'tool_error', 'warning', 'subagent_start', 'subagent_end', 'result', 'internal_error', 'parse_error'].includes(e.kind)).map(e => {
+  $('rd-log').innerHTML = ev.filter(e => ['init', 'codex_session', 'text', 'tool', 'tool_error', 'warning', 'subagent_start', 'subagent_end', 'result', 'internal_error', 'parse_error'].includes(e.kind)).map(e => {
     const d = e.data, t = clock(e.ts);
     switch (e.kind) {
       case 'init': return `${t} <b>init</b> ${esc(d.model)} · session ${esc((d.session_id ?? '').slice(0, 8))}`;
+      case 'codex_session': return `${t} <b>Codex</b> model ${esc(d.model ?? 'default')} · Intelligence ${esc(d.effort ?? 'default')}`;
       case 'text': return `${t} ${esc(d.text)}`;
       case 'tool': return `${t} <b>tool</b> ${esc(d.name)} ${esc(d.input.slice(0, 100))}`;
       case 'tool_error': return `${t} <span class="e">denied/failed</span> ${esc(d.text.slice(0, 140))}`;
@@ -220,10 +271,11 @@ setInterval(() => { if (runId && state.runs.find(r => r.id === runId)?.status ==
 
 const formData = () => {
   const f = new FormData($('form'));
+  const type = document.querySelector('[data-type].on')?.dataset.type ?? 'claude';
   return {
-    name: f.get('name'), role: f.get('role'), mode: document.querySelector('[data-mode].on')?.dataset.mode ?? 'manual', type: document.querySelector('[data-type].on')?.dataset.type ?? 'claude', prompt: f.get('prompt').trim(), cwd: f.get('cwd'),
-    schedule: f.get('schedule').trim() || null, model: (f.get('model') === '__custom' ? f.get('model_custom').trim() : f.get('model')) || null, effort: f.get('effort') || null, enabled: f.has('enabled'), memory: f.has('memory'), priority: f.get('priority'),
-    allowed_tools: [...new Set([...f.getAll('tool'), ...f.get('tools').split('\n').map(x => x.trim()).filter(Boolean)])],
+    name: f.get('name'), role: f.get('role'), mode: document.querySelector('[data-mode].on')?.dataset.mode ?? 'manual', type, prompt: f.get('prompt').trim(), cwd: f.get('cwd'),
+    schedule: f.get('schedule').trim() || null, model: (f.get('model') === '__custom' ? f.get('model_custom').trim() : f.get('model')) || null, effort: f.get('effort') || null, enabled: f.has('enabled'), memory: type !== 'codex' && f.has('memory'), priority: f.get('priority'), account: type === 'claude' ? f.get('account') || null : null,
+    allowed_tools: type === 'codex' ? [] : [...new Set([...f.getAll('tool'), ...f.get('tools').split('\n').map(x => x.trim()).filter(Boolean)])],
   };
 };
 document.addEventListener('input', e => { if (e.target.closest('#form')) { const f = formData(); draft = { for: creating ? 'new' : selected, ...f, tools: new FormData($('form')).get('tools') }; } });
@@ -239,6 +291,23 @@ document.addEventListener('submit', e => {
 });
 
 document.addEventListener('click', async e => {
+  if (e.target.closest('[data-refresh-models]')) { await loadCodexModels(); return; }
+  if (e.target.closest('[data-check-codex]')) {
+    if (codexChecking) return;
+    codexChecking = true;
+    const button = e.target.closest('[data-check-codex]'); button.disabled = true; button.textContent = 'Checking…';
+    try {
+      const result = await api('GET', '/api/adapters/codex');
+      codexStatus = result.ok ? `Connected · ${result.version} · ChatGPT subscription · ${result.executable}` : result.error;
+    } catch (err) { codexStatus = err.message; }
+    finally {
+      codexChecking = false;
+      const current = document.querySelector('[data-check-codex]');
+      if (current) { current.disabled = false; current.textContent = 'Check Codex connection'; }
+      if ($('codex-status')) $('codex-status').textContent = codexStatus;
+    }
+    return;
+  }
   if (e.target.closest('[data-browse]')) {
     const input = $('f-cwd'), p = await browseFolder(input.value.trim());
     if (p) { input.value = p; input.dispatchEvent(new Event('input', { bubbles: true })); } // the input handler stores the draft
@@ -263,15 +332,18 @@ document.addEventListener('click', async e => {
   }
   else if (t.dataset.tab) { tab = t.dataset.tab; showTab(); }
   else if (t.dataset.type) {
+    const previous = $('form').dataset.agentType;
+    if (previous === t.dataset.type) return;
     document.querySelectorAll('button[data-type]').forEach(b => b.classList.toggle('on', b === t));
     const form = $('form'); form.dataset.agentType = t.dataset.type;
     if (t.dataset.type === 'codex') { // reset what Codex cannot do instead of saving it silently
       if (document.querySelector('[data-mode].on')?.dataset.mode === 'auto') document.querySelector('[data-mode=manual]').click();
-      $('f-effort').value = ''; form.querySelector('[name=memory]').checked = false;
-      const m = $('f-model'); if (MODELS.includes(m.value) && m.value) m.value = '';
+      form.querySelector('[name=memory]').checked = false;
     }
+    updateModelControls('', ''); // provider-specific model ids and effort levels must never cross adapters
     $('mode-hint').textContent = modeHint(t.dataset.type, document.querySelector('[data-mode].on')?.dataset.mode);
     form.dispatchEvent(new Event('input', { bubbles: true }));
+    if (t.dataset.type === 'codex' && !modelsLoaded) void loadCodexModels();
   }
 });
 </script>

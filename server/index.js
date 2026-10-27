@@ -9,7 +9,8 @@ import { openStore } from './store.js';
 import { createBus } from './bus.js';
 import { createRunner, folderKey } from './runner.js';
 import { PERMISSION_MODES } from './adapters/claude.js';
-import { CODEX_MODES, WITHDRAWN_NOTE } from './adapters/codex.js';
+import { CODEX_MODES, getCodexModels, inspectCodex, WITHDRAWN_NOTE } from './adapters/codex.js';
+import { CODEX_EFFORTS, resolveCodexSelection } from './codex-models.js';
 import { isAnswerEvent, isEditable, validatePins } from './chat.js';
 import { listFolder } from './browse.js';
 import { resolveShownImage, saveUploads, UPLOAD_NAME, uploadType } from './images.js';
@@ -18,6 +19,7 @@ import { createScheduler, validateCron } from './scheduler.js';
 import { slug } from './util.js';
 import { createGraphs } from './graphs.js';
 import { createGuard } from './guard.js';
+import { createAccounts, limitKeyFor } from './accounts.js';
 import { createNotifier } from './notify.js';
 import { validateSettings, withDefaults } from './settings.js';
 
@@ -33,10 +35,12 @@ const hubToken = randomBytes(24).toString('hex');
 const store = openStore(join(dataDir, 'aios.db'));
 const bus = createBus();
 const graphs = createGraphs({ store, bus, dataDir, graphifyDir: join(root, 'tools', 'graphify') });
-const runner = createRunner({ store, bus, graphs, hubUrl, hubToken, mcpScript: join(root, 'server', 'mcp', 'inbox-server.js'), runDir: join(dataDir, 'runs'), uploadsDir });
+const accounts = createAccounts({ store, dataDir });
+const runner = createRunner({ store, bus, graphs, accounts, hubUrl, hubToken, mcpScript: join(root, 'server', 'mcp', 'inbox-server.js'), runDir: join(dataDir, 'runs'), uploadsDir });
 const getPins = () => store.getSetting('chat_pins') ?? [];
 const getSettings = () => withDefaults(store.getSetting('app'));
-const guard = createGuard({ store, getSettings });
+// a Claude agent draws on the usage windows of its account; a bad account reference is reported when the run is enqueued, not here
+const guard = createGuard({ store, getSettings, limitKey: a => { try { return a.type === 'claude' ? limitKeyFor(accounts.resolve(a)) : a.type; } catch { return a.type; } } });
 const scheduler = createScheduler({ store, runner, bus, guard, onChange: () => bus.push('agents', agentsView()) });
 const notifier = createNotifier({ store, bus, hubUrl, getSettings, scriptPath: join(root, 'server', 'toast.ps1') });
 const tasks = createTasks({ store, runner, bus, guard });
@@ -62,12 +66,12 @@ function snapshot() {
   const runs = store.listRuns({ limit: 100 });
   const subagents = {};
   for (const r of runs.slice(0, 30)) subagents[r.id] = store.listSubagents(r.id);
-  return { agents: agentsView(), runs, subagents, inbox: store.listInbox(), limits: store.getLimits(), tasks: store.listTasks(), graphs: graphs.list(), settings: getSettings(), notify: notifier.status(), chat_pins: getPins() };
+  return { agents: agentsView(), runs, subagents, inbox: store.listInbox(), limits: store.getLimits(), accounts: accounts.view(), tasks: store.listTasks(), graphs: graphs.list(), settings: getSettings(), notify: notifier.status(), chat_pins: getPins() };
 }
 
 // ---------- validation ----------
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']; // `claude --help`: --effort <level>
-function parseAgent(b) {
+async function parseAgent(b) {
   const errs = [];
   const str = (k, max = 10000) => (typeof b[k] === 'string' && b[k].trim() && b[k].length <= max ? b[k].trim() : (errs.push(`${k} is required`), ''));
   const opt = (k, max = 10000) => (b[k] === undefined || b[k] === null || b[k] === '' ? '' : typeof b[k] === 'string' && b[k].length <= max ? b[k].trim() : (errs.push(`${k} must be text of at most ${max} characters`), ''));
@@ -86,18 +90,27 @@ function parseAgent(b) {
   }
   a.mode = b.mode ?? 'manual';
   if (!Object.hasOwn(PERMISSION_MODES, a.mode)) errs.push(`mode must be one of ${Object.keys(PERMISSION_MODES).join(', ')}`);
-  if (b.model) a.model = String(b.model).trim();
-  if (b.effort) {
-    if (EFFORTS.includes(b.effort)) a.effort = b.effort; else errs.push(`effort must be one of ${EFFORTS.join(', ')}`);
+  a.model = opt('model', 200) || null;
+  a.effort = null;
+  if (b.effort !== undefined && b.effort !== null && b.effort !== '') {
+    const efforts = a.type === 'codex' ? CODEX_EFFORTS : EFFORTS;
+    if (efforts.includes(b.effort)) a.effort = b.effort; else errs.push(`effort must be one of ${efforts.join(', ')}`);
   }
+  a.account = b.account === undefined || b.account === null || b.account === '' ? null : b.account;
+  if (a.account !== null && (typeof a.account !== 'string' || !accounts.has(a.account))) errs.push(`unknown account "${a.account}"`);
+  else if (a.account !== null && a.type !== 'claude') errs.push('accounts apply to Claude agents only');
   if (a.type === 'codex') { // what the Codex adapter cannot do yet is refused, not silently ignored
     if (!Object.hasOwn(CODEX_MODES, a.mode)) errs.push(`mode "${a.mode}" is not available for Codex agents (use ${Object.keys(CODEX_MODES).join(', ')})`);
-    if (a.effort) errs.push('effort is not supported for Codex agents yet');
     if (a.memory) errs.push('the memory graph is not supported for Codex agents yet');
   }
   if (!a.role && !a.prompt) errs.push('role is required (or a routine prompt)');
   if (a.schedule && !a.prompt) errs.push('a schedule needs a routine prompt');
   if (errs.length) throw new HttpError(400, errs.join('; '));
+  if (a.type === 'codex' && (a.model || a.effort)) {
+    let models;
+    try { models = await getCodexModels(); } catch (e) { throw new HttpError(503, e.message); }
+    try { resolveCodexSelection(a, models); } catch (e) { throw new HttpError(400, e.message); }
+  }
   return a;
 }
 
@@ -108,6 +121,10 @@ const route = (method, pattern, handler, status = 200) =>
 const int = s => { const n = Number(s); if (!Number.isInteger(n)) throw new HttpError(400, 'id must be an integer'); return n; };
 
 route('GET', '/api/state', () => snapshot());
+route('GET', '/api/adapters/codex', () => inspectCodex());
+route('GET', '/api/adapters/codex/models', async () => {
+  try { return { models: await getCodexModels({ refresh: true }) }; } catch (e) { throw new HttpError(503, e.message); }
+});
 
 route('GET', '/api/runs/:id', ({ params }) => {
   const run = store.getRun(int(params.id));
@@ -119,8 +136,8 @@ route('POST', '/api/runs/:id/stop', ({ params }) => {
   return { ok: true };
 });
 
-route('POST', '/api/agents', ({ body }) => {
-  const a = parseAgent(body);
+route('POST', '/api/agents', async ({ body }) => {
+  const a = await parseAgent(body);
   const id = slug(a.name);
   if (!id) throw new HttpError(400, 'name must contain letters or digits');
   if (store.getAgent(id)) throw new HttpError(409, `an agent with id "${id}" already exists`);
@@ -131,9 +148,12 @@ route('POST', '/api/agents', ({ body }) => {
   bus.push('graphs', graphs.list());
   return { id };
 }, 201);
-route('PUT', '/api/agents/:id', ({ params, body }) => {
-  if (!store.getAgent(params.id)) throw new HttpError(404, 'agent not found');
-  const a = parseAgent(body);
+route('PUT', '/api/agents/:id', async ({ params, body }) => {
+  const a = await parseAgent(body);
+  const existing = store.getAgent(params.id);
+  if (!existing) throw new HttpError(404, 'agent not found');
+  if (store.listActiveRuns().some(r => r.agent_id === params.id)) throw new HttpError(409, 'agent has an active run; stop it before changing its configuration');
+  if (a.type !== existing.type && store.listRuns({ agentId: params.id, limit: 1 }).length) throw new HttpError(409, 'create a new agent to change its type; existing sessions belong to the original adapter');
   store.updateAgent(params.id, a);
   graphs.ensureProject(a.cwd);
   scheduler.sync();
@@ -267,8 +287,9 @@ route('POST', '/api/runs/:id/edit', async ({ params, body }) => {
   const agent = store.getAgent(run.agent_id);
   const resumeRun = run.parent_run_id ? store.getRun(run.parent_run_id) : null; // the same starting point the original message had
   store.addEvent(run.id, 'warning', { message: 'message edited and sent again as a new run' });
+  const forked = store.listEvents(run.id).some(e => e.kind === 'codex_session' && e.data.forked);
   try {
-    return { run: runner.enqueue(agent.id, { trigger: 'chat', prompt: message, resumeRun, images: attached, prefix: resumeRun && agent.type === 'codex' ? WITHDRAWN_NOTE : null }) }; // the images stay with the corrected text
+    return { run: runner.enqueue(agent.id, { trigger: 'chat', prompt: message, resumeRun, images: attached, prefix: resumeRun && agent.type === 'codex' && !forked ? WITHDRAWN_NOTE : null }) }; // the images stay with the corrected text
   } catch (e) { throw new HttpError(422, e.message); }
 }, 201);
 
@@ -288,6 +309,35 @@ route('PUT', '/api/settings', ({ body }) => {
   store.setSetting('app', v);
   bus.push('settings', { settings: getSettings(), notify: notifier.status() });
   return { settings: getSettings() };
+});
+// ---- Claude accounts: separate logins (CLAUDE_CONFIG_DIR) agents can be assigned to ----
+const accountErr = e => (e.code ? new HttpError({ NOT_FOUND: 404, BAD: 400, CONFLICT: 409, BUSY: 409 }[e.code] ?? 422, e.message) : e);
+const accountsChanged = () => { bus.push('accounts', accounts.view()); bus.push('agents', agentsView()); };
+route('GET', '/api/accounts', () => accounts.view());
+route('GET', '/api/accounts/:id/status', async ({ params }) => {
+  try { return await accounts.status(params.id); } catch (e) { throw accountErr(e); }
+});
+route('POST', '/api/accounts', ({ body }) => {
+  let id;
+  try { id = accounts.add(body.name); } catch (e) { throw accountErr(e); }
+  accountsChanged();
+  return { id };
+}, 201);
+route('PUT', '/api/accounts/:id', ({ params, body }) => {
+  try { accounts.rename(params.id, body.name); } catch (e) { throw accountErr(e); }
+  accountsChanged();
+  return { ok: true };
+});
+route('POST', '/api/accounts/:id/default', ({ params }) => {
+  try { accounts.setDefault(params.id); } catch (e) { throw accountErr(e); }
+  accountsChanged();
+  return { ok: true };
+});
+route('DELETE', '/api/accounts/:id', ({ params }) => {
+  let dir;
+  try { dir = accounts.remove(params.id); } catch (e) { throw accountErr(e); }
+  accountsChanged();
+  return { ok: true, dir }; // the folder (login, sessions) is kept
 });
 route('POST', '/api/notify/test', async () => {
   try { await notifier.test(); } catch (e) { throw new HttpError(422, e.message); }

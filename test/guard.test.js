@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateGuard, thresholdFor } from '../server/guard.js';
+import { createGuard, evaluateGuard, thresholdFor } from '../server/guard.js';
 import { DEFAULTS, validateSettings, withDefaults } from '../server/settings.js';
 
 const NOW = Date.UTC(2026, 9, 26, 12, 0, 0);
@@ -13,6 +13,15 @@ const limits = ({ five = 0.1, seven = 0.1, fiveReset = NOW + 3_600_000, sevenRes
 });
 const guard = (over = {}) => ({ ...DEFAULTS.guard, ...over });
 const check = (l, over = {}, priority = 'normal') => evaluateGuard({ limits: l, guard: guard(over), priority, now: NOW });
+
+test('Codex schedules and tasks use Codex limits independently of the Claude subscription', () => {
+  const providerLimits = { claude: limits({ seven: 0.99 }) };
+  const g = createGuard({ store: { getLimits: () => providerLimits }, getSettings: () => ({ guard: guard() }) });
+  assert.equal(g.check({ type: 'claude' }, NOW).ok, false);
+  assert.equal(g.check({ type: 'codex' }, NOW).ok, true);
+  providerLimits.codex = limits({ five: 0.99 });
+  assert.equal(g.check({ type: 'codex' }, NOW).ok, false);
+});
 
 test('allows when the guard is off, nothing was reported yet, or usage is below the thresholds', () => {
   assert.equal(check(limits({ five: 0.99 }), { enabled: false }).ok, true);

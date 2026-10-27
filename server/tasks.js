@@ -11,6 +11,7 @@ export const taskPrompt = t => `Task: ${t.title}${t.body.trim() ? `\n\n${t.body.
 export function createTasks({ store, runner, bus, guard, now = Date.now }) {
   const publish = id => bus.push('task', store.getTask(id));
   const busy = agentId => store.listActiveRuns().some(r => r.agent_id === agentId);
+  let dispatching = false;
 
   /** start (or restart) a task. Returns the guard verdict; throws Error with .code BAD | BUSY */
   function start(taskId) {
@@ -25,6 +26,8 @@ export function createTasks({ store, runner, bus, guard, now = Date.now }) {
     const run = runner.enqueue(agent.id, { trigger: 'task', prompt: taskPrompt(t) });
     store.updateTask(t.id, { status: 'running', run_id: run.id, last_run_id: run.id, note: null, finished_at: null });
     publish(t.id);
+    // Executable/configuration failures can finish inside enqueue, before the task was linked to its run.
+    onRun(store.getRun(run.id));
     return verdict;
   }
 
@@ -43,20 +46,24 @@ export function createTasks({ store, runner, bus, guard, now = Date.now }) {
 
   /** start every automatic task whose agent is free and not held back by the limit guard (oldest first, one per agent) */
   function dispatch() {
-    const started = new Set();
-    for (const t of store.listTasks().reverse()) {
-      if (t.status !== 'todo' || !t.auto || !t.agent_id || started.has(t.agent_id)) continue;
-      const agent = store.getAgent(t.agent_id);
-      if (!agent || !agent.enabled || busy(agent.id)) continue;
-      const v = guard.check(agent);
-      if (!v.ok) {
-        if (t.note !== v.reason) { store.updateTask(t.id, { note: v.reason }); publish(t.id); }
-        continue;
+    if (dispatching) return;
+    dispatching = true;
+    try {
+      const started = new Set();
+      for (const t of store.listTasks().reverse()) {
+        if (t.status !== 'todo' || !t.auto || !t.agent_id || started.has(t.agent_id)) continue;
+        const agent = store.getAgent(t.agent_id);
+        if (!agent || !agent.enabled || busy(agent.id)) continue;
+        const v = guard.check(agent);
+        if (!v.ok) {
+          if (t.note !== v.reason) { store.updateTask(t.id, { note: v.reason }); publish(t.id); }
+          continue;
+        }
+        try { start(t.id); started.add(agent.id); } catch (e) {
+          if (t.note !== e.message) { store.updateTask(t.id, { note: e.message }); publish(t.id); }
+        }
       }
-      try { start(t.id); started.add(agent.id); } catch (e) {
-        if (t.note !== e.message) { store.updateTask(t.id, { note: e.message }); publish(t.id); }
-      }
-    }
+    } finally { dispatching = false; }
   }
 
   return { start, onRun, dispatch };

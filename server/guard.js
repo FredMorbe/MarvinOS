@@ -35,6 +35,7 @@ export function evaluateGuard({ limits, guard, priority = 'normal', now = Date.n
   return { ok: true };
 }
 
-export function createGuard({ store, getSettings }) {
-  return { check: (agent, now = Date.now()) => evaluateGuard({ limits: store.getLimits().claude, guard: getSettings().guard, priority: agent.priority, now }) };
+/** @param limitKey  which entry of the stored limits an agent draws on (its provider; for Claude, its account) */
+export function createGuard({ store, getSettings, limitKey = agent => agent.type }) {
+  return { check: (agent, now = Date.now()) => evaluateGuard({ limits: store.getLimits()[limitKey(agent)], guard: getSettings().guard, priority: agent.priority, now }) };
 }

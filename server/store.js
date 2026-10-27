@@ -104,6 +104,8 @@ const MIGRATIONS = [
   'ALTER TABLE agents ADD COLUMN effort TEXT',
   "ALTER TABLE agents ADD COLUMN role TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE agents ADD COLUMN mode TEXT NOT NULL DEFAULT 'manual'",
+  'ALTER TABLE agents ADD COLUMN account TEXT', // Claude account (accounts.js); NULL = the default account
+  'ALTER TABLE runs ADD COLUMN account TEXT', // account the run used; its session only resumes there. NULL = a run from before accounts, or a Codex run
 ];
 
 const RUN_COLS = new Set(['status', 'session_id', 'started_at', 'ended_at', 'tokens', 'turns', 'error', 'result_text']);
@@ -142,21 +144,21 @@ export function openStore(file) {
     listAgents: () => db.prepare('SELECT * FROM agents ORDER BY created_at, id').all().map(agentOut),
     getAgent: id => agentOut(db.prepare('SELECT * FROM agents WHERE id = ?').get(id)),
     insertAgent(a) {
-      db.prepare('INSERT INTO agents (id, name, type, role, prompt, cwd, schedule, allowed_tools, model, effort, mode, enabled, memory, priority, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        .run(a.id, a.name, a.type, a.role ?? '', a.prompt ?? '', a.cwd, clean(a.schedule), JSON.stringify(a.allowed_tools ?? []), clean(a.model), clean(a.effort), a.mode ?? 'manual', a.enabled === false ? 0 : 1, a.memory ? 1 : 0, a.priority ?? 'normal', Date.now());
+      db.prepare('INSERT INTO agents (id, name, type, role, prompt, cwd, schedule, allowed_tools, model, effort, mode, enabled, memory, priority, account, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        .run(a.id, a.name, a.type, a.role ?? '', a.prompt ?? '', a.cwd, clean(a.schedule), JSON.stringify(a.allowed_tools ?? []), clean(a.model), clean(a.effort), a.mode ?? 'manual', a.enabled === false ? 0 : 1, a.memory ? 1 : 0, a.priority ?? 'normal', clean(a.account), Date.now());
       return this.getAgent(a.id);
     },
     updateAgent(id, a) {
-      db.prepare('UPDATE agents SET name=?, type=?, role=?, prompt=?, cwd=?, schedule=?, allowed_tools=?, model=?, effort=?, mode=?, enabled=?, memory=?, priority=? WHERE id=?')
-        .run(a.name, a.type, a.role ?? '', a.prompt ?? '', a.cwd, clean(a.schedule), JSON.stringify(a.allowed_tools ?? []), clean(a.model), clean(a.effort), a.mode ?? 'manual', a.enabled === false ? 0 : 1, a.memory ? 1 : 0, a.priority ?? 'normal', id);
+      db.prepare('UPDATE agents SET name=?, type=?, role=?, prompt=?, cwd=?, schedule=?, allowed_tools=?, model=?, effort=?, mode=?, enabled=?, memory=?, priority=?, account=? WHERE id=?')
+        .run(a.name, a.type, a.role ?? '', a.prompt ?? '', a.cwd, clean(a.schedule), JSON.stringify(a.allowed_tools ?? []), clean(a.model), clean(a.effort), a.mode ?? 'manual', a.enabled === false ? 0 : 1, a.memory ? 1 : 0, a.priority ?? 'normal', clean(a.account), id);
       return this.getAgent(id);
     },
     deleteAgent: id => db.prepare('DELETE FROM agents WHERE id = ?').run(id).changes > 0,
 
     // ---- runs ----
     createRun(r) {
-      const info = db.prepare('INSERT INTO runs (agent_id, parent_run_id, trigger, status, session_id, prompt, created_at) VALUES (?,?,?,?,?,?,?)')
-        .run(r.agent_id, clean(r.parent_run_id), r.trigger, r.status, clean(r.session_id), r.prompt, Date.now());
+      const info = db.prepare('INSERT INTO runs (agent_id, parent_run_id, trigger, status, session_id, prompt, account, created_at) VALUES (?,?,?,?,?,?,?,?)')
+        .run(r.agent_id, clean(r.parent_run_id), r.trigger, r.status, clean(r.session_id), r.prompt, clean(r.account), Date.now());
       return this.getRun(Number(info.lastInsertRowid));
     },
     getRun: id => db.prepare('SELECT * FROM runs WHERE id = ?').get(id),

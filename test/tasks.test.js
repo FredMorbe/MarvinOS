@@ -23,7 +23,7 @@ function setup({ guardOk = true } = {}) {
   /** what the real runner does: store the new status, then the update reaches the tasks */
   const setRun = (run, status, error = null) => { store.updateRun(run.id, { status, error }); tasks.onRun(store.getRun(run.id)); };
   const mk = (extra = {}) => store.insertTask({ project_path: proj, title: 'Fix the login', body: 'see auth.js', agent_id: 'a', ...extra });
-  return { store, tasks, mk, setRun, enqueued, pushed, g, proj, done: () => { store.db.close(); rmSync(dir, { recursive: true, force: true }); } };
+  return { store, tasks, runner, mk, setRun, enqueued, pushed, g, proj, done: () => { store.db.close(); rmSync(dir, { recursive: true, force: true }); } };
 }
 
 test('start sends the task text as the run prompt and links the run', () => {
@@ -37,6 +37,29 @@ test('start sends the task text as the run prompt and links the run', () => {
     assert.equal(s.enqueued[0].trigger, 'task');
     assert.equal(s.enqueued[0].prompt, taskPrompt(t));
     assert.match(s.enqueued[0].prompt, /^Task: Fix the login\n\nsee auth\.js$/);
+  } finally { s.done(); }
+});
+
+test('immediate Codex launch failures finish linked tasks and do not repeatedly dispatch them', () => {
+  const s = setup();
+  try {
+    const enqueue = s.runner.enqueue;
+    s.runner.enqueue = (id, options) => {
+      const run = enqueue(id, options);
+      s.setRun(run, 'failed', 'Codex CLI not found');
+      return s.store.getRun(run.id);
+    };
+    const first = s.mk({ auto: true }), second = s.mk({ auto: true });
+    s.tasks.dispatch();
+    s.tasks.dispatch();
+    for (const t of [first, second]) {
+      const after = s.store.getTask(t.id);
+      assert.equal(after.status, 'failed');
+      assert.equal(after.note, 'Codex CLI not found');
+      assert.equal(after.finished_at, 1000);
+    }
+    s.tasks.dispatch();
+    assert.equal(s.enqueued.length, 2);
   } finally { s.done(); }
 });
 

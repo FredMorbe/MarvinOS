@@ -10,8 +10,22 @@
 <link rel="stylesheet" href="/hud.css">
 <link rel="stylesheet" href="/theme.css">
 <style>
-  .main { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); max-width: 1500px; width: 100%; margin: 0 auto; }
-  @media (max-width: 1100px) { .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; } }
+  .main { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: min-content; align-content: start; overflow: auto; max-width: 1500px; width: 100%; margin: 0 auto; }
+  .main .wide { grid-column: 1 / -1; }
+  @media (max-width: 1100px) { .main { grid-template-columns: minmax(0, 1fr); overflow: visible; } }
+  .accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--sp-3); align-items: start; }
+  .acct { display: grid; gap: var(--sp-2); padding: var(--sp-3); background: var(--shade-1); border: 1px solid var(--line); border-radius: 8px; align-content: start; }
+  .acct-h { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+  .acct-h b { font: 600 var(--fs-4)/1.2 var(--f-head); letter-spacing: .08em; text-transform: uppercase; overflow-wrap: anywhere; }
+  .acct-h .input { flex: 1; min-width: 120px; }
+  .acct .who { font: 400 var(--fs-3)/1.4 var(--f-mono); overflow-wrap: anywhere; }
+  .acct .who.bad { color: var(--orange); }
+  .acct .sub { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; overflow-wrap: anywhere; }
+  .acct-acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+  .login { display: grid; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); background: var(--shade-2); border: 1px solid var(--line); border-radius: 6px; }
+  .login code { font: 400 var(--fs-2)/1.5 var(--f-mono); overflow-wrap: anywhere; user-select: all; }
+  .acct-add { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
+  .acct-add .input { width: 240px; max-width: 100%; }
   .body { display: grid; gap: var(--sp-4); padding: var(--sp-2) var(--sp-4) var(--sp-4); align-content: start; }
   .hint { font: 400 var(--fs-1)/1.6 var(--f-mono); color: var(--sec); letter-spacing: .04em; }
   .check { display: flex; align-items: center; gap: var(--sp-3); font: 400 var(--fs-3)/1.3 var(--f-body); color: var(--txt); cursor: pointer; }
@@ -39,6 +53,15 @@
 <div class="app">
   <header id="top"></header>
   <main class="main">
+    <section class="panel wide">
+      <div class="panel-h"><span class="eyebrow">Claude accounts</span><span class="meta" id="acc-meta"></span></div>
+      <div class="body">
+        <div class="accounts" id="accounts"></div>
+        <form class="acct-add" id="acct-add" autocomplete="off"><input class="input" name="name" maxlength="40" placeholder="New account, e.g. Frederik" aria-label="Name of a new account"><button class="btn solid" type="submit">Add account</button></form>
+        <p class="hint">Each account is its own Claude login with its own usage windows, so two people can work at the same time. Pick one per agent in the agent's Role tab; agents without a choice use the default. “Default login” is whatever <code>claude</code> is logged in as on this PC. A new account is logged in once with the command shown on its card, and stays logged in. A chat belongs to the account it started on: after switching an agent, start a new chat.</p>
+      </div>
+    </section>
+
     <section class="panel">
       <div class="panel-h"><span class="eyebrow">Limit guard</span><span class="meta" id="g-meta"></span></div>
       <form class="body" id="guard-form">
@@ -86,7 +109,7 @@
   </main>
 </div>
 <script type="module">
-import { state, subscribe, api, act, toast, mountShell } from '/app.js';
+import { state, subscribe, api, act, toast, mountShell, esc, limitKey } from '/app.js';
 mountShell('settings');
 const $ = id => document.getElementById(id);
 const TYPES = ['question', 'approval', 'warning', 'result'];
@@ -106,8 +129,12 @@ const outputs = () => { $('five-o').textContent = `${$('five').value}%`; $('seve
 $('five').oninput = $('seven').oninput = outputs;
 
 function live(s) {
-  const w = s.limits.claude?.windows, p = u => (u == null ? 'no data yet' : `now ${Math.round(u * 100)}%`);
-  $('five-now').textContent = p(w?.five_hour?.utilization); $('seven-now').textContent = p(w?.seven_day?.utilization);
+  // the usage per Claude account; the thresholds apply to each of them
+  const now = key => s.accounts.list.map(a => {
+    const u = s.limits[limitKey(a.id)]?.windows?.[key]?.utilization, v = u == null ? 'no data yet' : `now ${Math.round(u * 100)}%`;
+    return s.accounts.list.length > 1 ? `${a.name}: ${v}` : v;
+  }).join(' · ');
+  $('five-now').textContent = now('five_hour'); $('seven-now').textContent = now('seven_day');
   const g = s.settings.guard;
   $('g-meta').textContent = g.enabled ? 'ON' : 'OFF';
   $('n-meta').textContent = !s.notify.supported ? 'WINDOWS ONLY' : s.settings.notify.enabled ? 'ON' : 'OFF';
@@ -121,7 +148,73 @@ subscribe(s => {
   if (!s.settings) return;
   if (!filled || !document.activeElement?.closest('form')) fill(s); // don't overwrite a form someone is editing
   live(s);
+  renderAccounts(s);
 });
+
+// ---- Claude accounts
+const statuses = new Map(); // account id -> { loading } | { logged_in, email, subscription } | { error }
+let renaming = null;
+function loadStatus(id) {
+  statuses.set(id, { loading: true });
+  api('GET', `/api/accounts/${encodeURIComponent(id)}/status`)
+    .then(r => statuses.set(id, r), e => statuses.set(id, { error: e.message }))
+    .finally(() => renderAccounts(state));
+}
+const loginCommand = a => (a.builtin ? 'claude auth login' : `set CLAUDE_CONFIG_DIR=${a.dir}&& claude auth login`);
+function renderAccounts(s) {
+  const box = $('accounts');
+  if (box.contains(document.activeElement) && document.activeElement.matches('input')) return; // a name is being typed
+  const { list, default: def } = s.accounts;
+  for (const a of list) if (!statuses.has(a.id)) loadStatus(a.id);
+  $('acc-meta').textContent = `${list.length} ${list.length === 1 ? 'ACCOUNT' : 'ACCOUNTS'}`;
+  box.innerHTML = list.map(a => {
+    const st = statuses.get(a.id) ?? { loading: true };
+    const users = s.agents.filter(x => x.type === 'claude' && (x.account ?? def) === a.id).length;
+    const who = st.loading ? 'checking login…' : st.error ? st.error : st.logged_in ? `${st.email ?? 'logged in'}${st.subscription ? ` · ${st.subscription}` : ''}` : 'not logged in';
+    return `<div class="acct" data-id="${esc(a.id)}">
+      <div class="acct-h">${renaming === a.id
+        ? `<input class="input" name="rename" maxlength="40" value="${esc(a.name)}" aria-label="New name"><button class="btn solid" data-do="save-name">Save</button><button class="btn" data-do="cancel-name">Cancel</button>`
+        : `<b>${esc(a.name)}</b>${a.builtin ? '<span class="chip">default login</span>' : ''}${a.id === def ? '<span class="chip cyan">default account</span>' : ''}`}</div>
+      <div class="who ${st.error || (!st.loading && !st.logged_in) ? 'bad' : ''}">${esc(who)}</div>
+      <div class="sub">${users} ${users === 1 ? 'agent' : 'agents'} · ${a.builtin ? 'login of the claude CLI on this PC' : esc(a.dir)}</div>
+      ${!st.loading && !st.error && !st.logged_in ? `<div class="login"><span class="sub">Log in once in a terminal (cmd), with the Claude account you want here:</span><code>${esc(loginCommand(a))}</code><div class="acct-acts"><button class="btn" data-do="copy">Copy command</button></div></div>` : ''}
+      <div class="acct-acts">
+        ${a.id === def ? '' : '<button class="btn" data-do="default">Make default</button>'}
+        <button class="btn" data-do="rename">Rename</button>
+        <button class="btn" data-do="check">Check login</button>
+        ${a.builtin ? '' : '<button class="btn red" data-do="remove">Remove</button>'}
+      </div></div>`;
+  }).join('');
+}
+$('accounts').onclick = e => {
+  const b = e.target.closest('[data-do]');
+  if (!b) return;
+  const a = state.accounts.list.find(x => x.id === b.closest('.acct').dataset.id), id = encodeURIComponent(a.id);
+  act(async () => {
+    switch (b.dataset.do) {
+      case 'default': await api('POST', `/api/accounts/${id}/default`, {}); break;
+      case 'rename': renaming = a.id; renderAccounts(state); $('accounts').querySelector('[name=rename]').focus(); break;
+      case 'cancel-name': document.activeElement.blur(); renaming = null; renderAccounts(state); break; // a focused name field would make renderAccounts skip the redraw
+      case 'save-name': { const name = b.closest('.acct').querySelector('[name=rename]').value; await api('PUT', `/api/accounts/${id}`, { name }); document.activeElement.blur(); renaming = null; renderAccounts(state); break; }
+      case 'check': loadStatus(a.id); renderAccounts(state); break;
+      case 'copy': await navigator.clipboard.writeText(loginCommand(a)); toast('Command copied. Paste it into a terminal.', 'ok'); break;
+      case 'remove': {
+        if (!confirm(`Remove the account "${a.name}"? Its folder with the login stays on disk.`)) break;
+        await api('DELETE', `/api/accounts/${id}`); statuses.delete(a.id); break;
+      }
+    }
+  });
+};
+$('accounts').onkeydown = e => {
+  if (e.target.name !== 'rename') return;
+  if (e.key === 'Enter') { e.preventDefault(); e.target.closest('.acct').querySelector('[data-do=save-name]').click(); }
+  else if (e.key === 'Escape') e.target.closest('.acct').querySelector('[data-do=cancel-name]').click();
+};
+$('acct-add').onsubmit = e => {
+  e.preventDefault();
+  const f = e.target;
+  act(async () => { const { id } = await api('POST', '/api/accounts', { name: f.name.value }); f.reset(); toast('Account added. Log it in with the command on its card.', 'ok'); loadStatus(id); });
+};
 
 const collect = () => {
   const f = $('guard-form'), n = $('notify-form');
