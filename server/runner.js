@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
-import { createWriteStream, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createWriteStream, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
-import { buildClaudeArgs, ClaudeStream } from './adapters/claude.js';
+import { buildClaudeArgs, buildClaudeInput, ClaudeStream } from './adapters/claude.js';
 import { buildCodexArgs, CodexStream, findCodex } from './adapters/codex.js';
 
 // Subscription limits are the scarce resource, so only a few agents run at once.
@@ -19,17 +19,18 @@ export function nextRunnable(queue, liveIds, folderOf) {
   return queue.findIndex(id => !busy.has(folderOf(id)));
 }
 
-export function createRunner({ store, bus, graphs, hubUrl, hubToken, mcpScript, runDir }) {
+export function createRunner({ store, bus, graphs, hubUrl, hubToken, mcpScript, runDir, uploadsDir }) {
   mkdirSync(runDir, { recursive: true });
   const live = new Map(); // runId -> { child, stopRequested, result, stderr, finished }
   const queue = [];
   const extraTools = new Map(); // runId -> permissions granted by an approval (memory only, like the queue)
   const promptPrefix = new Map(); // runId -> text sent in front of the prompt but not stored with it (memory only)
+  const runImages = new Map(); // runId -> [{ file, name, type }] uploaded images sent with the prompt (file is inside uploadsDir; the list is also stored as an 'attachment' event)
 
   const publishRun = id => bus.push('run', store.getRun(id));
   const publishSubagents = runId => bus.push('subagents', { run_id: runId, items: store.listSubagents(runId) });
 
-  function enqueue(agentId, { trigger, prompt = null, resumeRun = null, extraTools: granted = [], prefix = null }) {
+  function enqueue(agentId, { trigger, prompt = null, resumeRun = null, extraTools: granted = [], prefix = null, images = [] }) {
     const agent = store.getAgent(agentId);
     if (!agent) throw new Error(`unknown agent "${agentId}"`);
     if (!['claude', 'codex'].includes(agent.type)) throw new Error(`adapter "${agent.type}" is not implemented yet`);
@@ -41,6 +42,10 @@ export function createRunner({ store, bus, graphs, hubUrl, hubToken, mcpScript, 
     });
     if (granted.length) extraTools.set(run.id, granted);
     if (prefix) promptPrefix.set(run.id, prefix);
+    if (images.length) {
+      runImages.set(run.id, images);
+      store.addEvent(run.id, 'attachment', { files: images });
+    }
     queue.push(run.id);
     publishRun(run.id);
     pump();
@@ -69,9 +74,10 @@ export function createRunner({ store, bus, graphs, hubUrl, hubToken, mcpScript, 
     // An API key in the environment would silently switch the run from the subscription to API billing.
     const env = { ...process.env };
     for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'OPENAI_API_KEY', 'CODEX_API_KEY']) delete env[k];
-    let args, exe = bin, stream;
+    const images = runImages.get(runId) ?? [];
+    let args, exe = bin, stream, input = (promptPrefix.get(runId) ?? '') + run.prompt;
     if (codex) {
-      try { exe = findCodex(env); args = buildCodexArgs({ agent, resumeSessionId: run.session_id }); } catch (e) {
+      try { exe = findCodex(env); args = buildCodexArgs({ agent, resumeSessionId: run.session_id, images: images.map(i => join(uploadsDir, i.file)) }); } catch (e) {
         return finish({ runId, state: { finished: false }, raw: createWriteStream(join(runDir, `run-${runId}.jsonl`)), mcpFile }, { status: 'failed', error: e.message });
       }
       stream = new CodexStream();
@@ -86,8 +92,13 @@ export function createRunner({ store, bus, graphs, hubUrl, hubToken, mcpScript, 
       }));
       const allowedTools = [...agent.allowed_tools, ...(memory?.tools ?? []), ...(extraTools.get(runId) ?? [])];
       const chat = store.rootRun(runId).trigger === 'chat';
-      args = buildClaudeArgs({ agent, allowedTools, memory: !!memory, chat, resumeSessionId: run.session_id, fork: run.trigger === 'chat', mcpConfigFile: mcpFile });
+      args = buildClaudeArgs({ agent, allowedTools, memory: !!memory, chat, resumeSessionId: run.session_id, fork: run.trigger === 'chat', mcpConfigFile: mcpFile, streamInput: images.length > 0 });
       stream = new ClaudeStream();
+      if (images.length) {
+        try { input = buildClaudeInput(input, images.map(i => ({ type: i.type, data: readFileSync(join(uploadsDir, i.file)).toString('base64') }))); } catch (e) {
+          return finish({ runId, state: { finished: false }, raw: createWriteStream(join(runDir, `run-${runId}.jsonl`)), mcpFile }, { status: 'failed', error: `could not read the attached image: ${e.message}` });
+        }
+      }
     }
 
     const state = { child: null, stopRequested: false, result: null, stderr: '', finished: false, waiters: [] };
@@ -115,7 +126,7 @@ export function createRunner({ store, bus, graphs, hubUrl, hubToken, mcpScript, 
     child.on('error', e => finish(ctx, { status: 'failed', error: `could not start ${bin}: ${e.message}` }));
     child.stderr.on('data', d => { state.stderr = (state.stderr + d).slice(-4000); });
     child.stdin.on('error', () => { /* claude exited before reading the prompt: the close handler reports why */ });
-    child.stdin.end((promptPrefix.get(runId) ?? '') + run.prompt);
+    child.stdin.end(input);
 
     createInterface({ input: child.stdout }).on('line', line => {
       state.lastOutput = Date.now();
@@ -216,6 +227,7 @@ export function createRunner({ store, bus, graphs, hubUrl, hubToken, mcpScript, 
     rmSync(mcpFile, { force: true });
     extraTools.delete(runId);
     promptPrefix.delete(runId);
+    runImages.delete(runId);
     noted.delete(runId);
     store.stopRunningSubagents(runId);
     publishSubagents(runId);

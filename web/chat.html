@@ -69,6 +69,22 @@
   .hint { font: 400 var(--fs-1)/1.5 var(--f-mono); color: var(--sec); letter-spacing: .04em; }
   .actions .hint { margin-left: auto; }
   .col { display: flex; flex-direction: column; min-height: 0; }
+  /* images: in the thread (sent by the user, or mentioned by the agent) and as attachments in the composer */
+  .pics { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
+  .pics:empty { display: none; }
+  .line .pics { padding-left: 0; }
+  .pic { display: block; padding: 0; line-height: 0; background: rgba(0,0,0,.35); border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; cursor: zoom-in; transition: border-color .2s; }
+  .pic:hover, .pic:focus-visible { border-color: var(--cyan); outline: none; }
+  .pic img { display: block; max-width: min(100%, 420px); max-height: 260px; object-fit: contain; }
+  .thumbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+  .thumbs:empty { display: none; }
+  .thumb { position: relative; line-height: 0; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+  .thumb img { display: block; height: 56px; max-width: 120px; object-fit: cover; }
+  .thumb button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; display: grid; place-items: center; padding: 0; font: 700 12px/1 var(--f-mono); color: var(--txt); background: rgba(0,0,0,.7); border: 0; border-radius: 50%; cursor: pointer; }
+  .thumb button:hover { background: var(--red); color: #fff; }
+  .composer.filedrop { outline: 1px dashed var(--cyan); outline-offset: -4px; }
+  .lightbox { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: var(--sp-4); background: rgba(2, 6, 12, .9); cursor: zoom-out; }
+  .lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -92,9 +108,12 @@
       <div class="panel-h"><span class="eyebrow">Chat</span><span class="meta" id="meta"></span></div>
       <div class="panel-b" id="scroller"><div class="thread" id="thread"></div></div>
       <form class="composer" id="composer">
-        <textarea class="input" id="msg" aria-label="Message" placeholder="Write to the agent… (Enter sends, Shift+Enter = new line)"></textarea>
+        <div class="thumbs" id="thumbs"></div>
+        <textarea class="input" id="msg" aria-label="Message" placeholder="Write to the agent… (Enter sends, Shift+Enter = new line, paste or drop images)"></textarea>
         <div class="actions">
           <button class="btn solid" type="submit" id="send">Send</button>
+          <button class="btn" type="button" id="attach">Image</button>
+          <input type="file" id="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
           <button class="btn" type="button" id="cancel" hidden>Cancel edit</button>
           <button class="btn red" type="button" id="stop" hidden>Stop</button>
           <button class="btn" type="button" id="fresh">New chat</button>
@@ -106,6 +125,7 @@
 </div>
 <script type="module">
 import { state, subscribe, api, act, toast, mountShell, onText, projectsOf, esc, clock, dur } from '/app.js';
+import { findImagePaths, unescapeJson } from '/imagepaths.js';
 mountShell('chat');
 const $ = id => document.getElementById(id);
 
@@ -241,33 +261,81 @@ lists.addEventListener('drop', e => {
 });
 lists.addEventListener('dragend', endDrag);
 
+// ---- images: the user's attachments and image files the agent mentions
+const IMAGE_ONLY_TEXT = '(see the attached image)'; // what the hub stores for a message without text
+const picsHtml = urls => `<div class="pics">${urls.map(u => `<button type="button" class="pic" data-zoom="${esc(u)}"><img src="${esc(u)}" alt="" loading="lazy"></button>`).join('')}</div>`;
+const uploadUrl = file => `/api/uploads/${encodeURIComponent(file)}`;
+/** images for the files mentioned in `text`; `seen` makes each file appear once per render, where it is first mentioned */
+function mentionedPics(text, seen, opts) {
+  const urls = [];
+  for (const p of findImagePaths(text, opts)) {
+    const key = p.toLowerCase();
+    if (seen.has(key) || urls.length >= 4) continue;
+    seen.add(key);
+    urls.push(`/api/image?agent=${encodeURIComponent(agentId)}&path=${encodeURIComponent(p)}`);
+  }
+  return urls.length ? picsHtml(urls) : '';
+}
+
+let lastHtml = '', stick = true;
+$('scroller').addEventListener('scroll', () => { const s = $('scroller'); stick = s.scrollHeight - s.scrollTop - s.clientHeight < 80; });
+// images arrive after the text and make the thread taller; a thread that was scrolled to the end stays there
+$('thread').addEventListener('load', () => { if (stick) $('scroller').scrollTop = $('scroller').scrollHeight; }, true);
+// a mentioned file that is not there (yet) shows nothing; the next render asks again
+$('thread').addEventListener('error', e => { if (e.target.tagName === 'IMG') e.target.closest('.pic')?.remove(); }, true);
+
+function tickWorking() {
+  for (const el of $('thread').querySelectorAll('[data-since]')) el.textContent = `working… ${dur(Date.now() - Number(el.dataset.since))}`;
+}
+
 function renderThread() {
   const a = agent();
   const scroller = $('scroller');
   const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
-  if (!a) { $('thread').innerHTML = '<div class="empty">Pick an agent.</div>'; return; }
-  if (!thread.length) { $('thread').innerHTML = `<div class="empty">No chat with ${esc(a.name)} yet. Every message runs the agent with its own tools and folder, so the answer can take a moment.</div>`; return; }
-  $('thread').innerHTML = thread.map(({ run, events, editable }) => {
-    const out = [];
-    if (run.trigger === 'chat') {
-      const editLink = editable && run.id !== editRunId ? ` <button class="edit-link" data-edit="${run.id}" aria-label="Edit message">edit</button>` : '';
-      out.push(`<div class="bubble me ${run.id === editRunId ? 'editing' : ''}"><span class="who">you · ${clock(run.created_at)}${editLink}</span>${esc(run.prompt)}</div>`);
-    }
-    else out.push(`<div class="line">resumed after your answer in the <a href="/inbox.html">inbox</a></div>`);
-    for (const e of events) {
-      const d = e.data;
-      if (e.kind === 'text' && d.owner === 'main') out.push(`<div class="bubble"><span class="who">${esc(a.name)} · ${clock(e.ts)}</span>${esc(d.text)}</div>`);
-      else if (e.kind === 'tool') out.push(`<div class="line">${d.owner === 'main' ? '' : 'subagent · '}tool ${esc(d.name)} ${esc(d.input.slice(0, 100))}</div>`);
-      else if (e.kind === 'tool_error') out.push(`<div class="line w">denied or failed: ${esc(d.text.slice(0, 160))}</div>`);
-    }
-    if (run.status === 'queued') out.push('<div class="line">queued…</div>');
-    else if (run.status === 'running') out.push(`<div class="line">working… ${dur(Date.now() - run.started_at)}</div>`);
-    else if (run.status === 'waiting') out.push('<div class="line w">waiting for your answer in the <a href="/inbox.html">inbox</a></div>');
-    else if (run.status === 'stopped') out.push('<div class="line">stopped</div>');
-    else if (run.status === 'failed') out.push(`<div class="bubble err"><span class="who">run failed</span>${esc(run.error ?? 'unknown error')}</div>`);
-    return out.join('');
-  }).join('');
-  if (nearBottom) scroller.scrollTop = scroller.scrollHeight;
+  let html;
+  if (!a) html = '<div class="empty">Pick an agent.</div>';
+  else if (!thread.length) html = `<div class="empty">No chat with ${esc(a.name)} yet. Every message runs the agent with its own tools and folder, so the answer can take a moment.</div>`;
+  else {
+    const seen = new Set();
+    html = thread.map(({ run, events, attachments, editable }) => {
+      const out = [];
+      if (run.trigger === 'chat') {
+        const editLink = editable && run.id !== editRunId ? ` <button class="edit-link" data-edit="${run.id}" aria-label="Edit message">edit</button>` : '';
+        const text = attachments.length && run.prompt === IMAGE_ONLY_TEXT ? '' : esc(run.prompt);
+        out.push(`<div class="bubble me ${run.id === editRunId ? 'editing' : ''}"><span class="who">you · ${clock(run.created_at)}${editLink}</span>${text}${attachments.length ? picsHtml(attachments.map(f => uploadUrl(f.file))) : ''}</div>`);
+      }
+      else out.push(`<div class="line">resumed after your answer in the <a href="/inbox.html">inbox</a></div>`);
+      for (const e of events) {
+        const d = e.data;
+        if (e.kind === 'text' && d.owner === 'main') out.push(`<div class="bubble"><span class="who">${esc(a.name)} · ${clock(e.ts)}</span>${esc(d.text)}${mentionedPics(d.text, seen, {})}</div>`);
+        else if (e.kind === 'tool') out.push(`<div class="line">${d.owner === 'main' ? '' : 'subagent · '}tool ${esc(d.name)} ${esc(d.input.slice(0, 100))}${mentionedPics(unescapeJson(d.input), seen, { absoluteOnly: true })}</div>`);
+        else if (e.kind === 'tool_error') out.push(`<div class="line w">denied or failed: ${esc(d.text.slice(0, 160))}</div>`);
+      }
+      if (run.status === 'queued') out.push('<div class="line">queued…</div>');
+      else if (run.status === 'running') out.push(`<div class="line" data-since="${run.started_at}"></div>`); // the seconds are filled in by tickWorking, so the thread is not rebuilt every tick
+      else if (run.status === 'waiting') out.push('<div class="line w">waiting for your answer in the <a href="/inbox.html">inbox</a></div>');
+      else if (run.status === 'stopped') out.push('<div class="line">stopped</div>');
+      else if (run.status === 'failed') out.push(`<div class="bubble err"><span class="who">run failed</span>${esc(run.error ?? 'unknown error')}</div>`);
+      return out.join('');
+    }).join('');
+  }
+  if (html !== lastHtml) { // rebuilding an unchanged thread would reload every image
+    lastHtml = html;
+    $('thread').innerHTML = html;
+    if (nearBottom) scroller.scrollTop = scroller.scrollHeight;
+  }
+  tickWorking();
+}
+
+function zoom(src) {
+  const box = document.createElement('div');
+  box.className = 'lightbox';
+  box.innerHTML = `<img src="${esc(src)}" alt="">`;
+  const close = () => { box.remove(); removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); } }; // must not close the embedded chat
+  box.onclick = close;
+  addEventListener('keydown', onKey, true);
+  document.body.append(box);
 }
 
 const editItem = () => thread.find(t => t.run.id === editRunId && t.editable);
@@ -275,6 +343,58 @@ const editItem = () => thread.find(t => t.run.id === editRunId && t.editable);
 function leaveEdit(keepText) {
   editRunId = null;
   if (!keepText) $('msg').value = '';
+}
+
+// ---- images to send: a picture is read in the browser and downscaled when it is bigger than the model can use
+const MAX_IMAGES = 4, MAX_SIDE = 2576, MAX_BYTES = 3.5 * 1024 * 1024; // the hub refuses more than 4 images of 5 MB; base64 adds a third
+let pending = []; // [{ name, data (base64), url (for the thumbnail) }]
+
+const toBase64 = blob => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(',')[1]);
+  r.onerror = () => reject(new Error('could not read the image'));
+  r.readAsDataURL(blob);
+});
+
+async function prepareImage(file) {
+  const name = file.name || 'image';
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) throw new Error(`${name}: only PNG, JPEG, GIF and WebP images can be sent`);
+  let blob = file;
+  const bmp = await createImageBitmap(file).catch(() => { throw new Error(`${name} is not a readable image`); });
+  try {
+    const side = Math.max(bmp.width, bmp.height);
+    if (file.size > MAX_BYTES || side > MAX_SIDE) {
+      const k = Math.min(1, MAX_SIDE / side);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(bmp.width * k); canvas.height = Math.round(bmp.height * k);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height); // JPEG has no transparency
+      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
+      if (!blob) throw new Error(`${name} could not be scaled down`);
+    }
+  } finally { bmp.close(); }
+  return { name, data: await toBase64(blob), url: URL.createObjectURL(blob) };
+}
+
+async function addImages(files) {
+  const room = MAX_IMAGES - pending.length;
+  if (files.length > room) toast(`At most ${MAX_IMAGES} images per message.`, 'warn');
+  const prepared = await Promise.all(files.slice(0, Math.max(0, room)).map(prepareImage));
+  pending.push(...prepared);
+  renderThumbs();
+}
+
+function clearPending() {
+  pending.forEach(p => URL.revokeObjectURL(p.url));
+  pending = [];
+  renderThumbs();
+}
+
+let thumbsHtml = '';
+function renderThumbs() {
+  const html = editRunId ? '' : pending.map((p, i) => `<span class="thumb"><img src="${p.url}" alt="${esc(p.name)}"><button type="button" data-rm="${i}" aria-label="Remove ${esc(p.name)}">×</button></span>`).join('');
+  if (html !== thumbsHtml) $('thumbs').innerHTML = thumbsHtml = html;
 }
 
 function renderComposer() {
@@ -289,6 +409,8 @@ function renderComposer() {
   $('send').disabled = !usable || (!!run && !editing);
   $('send').textContent = editing ? 'Save' : 'Send';
   $('fresh').disabled = !usable || !!run;
+  $('attach').disabled = !usable || !!run || editing; // an edited message keeps the images it was sent with
+  renderThumbs();
   $('cancel').hidden = !editing;
   $('stop').hidden = !run;
   $('hint').textContent = !a ? '' : !usable ? `${a.type} chat is not available yet` : editing ? 'editing: the agent has not answered yet' : run ? 'the agent is working' : '';
@@ -308,15 +430,17 @@ setInterval(() => { if (activeRun()) renderThread(); }, 2000); // keeps the "wor
 
 async function send(fresh) {
   const message = $('msg').value.trim();
-  if (!message) return;
-  const r = await api('POST', `/api/agents/${encodeURIComponent(agentId)}/chat`, { message, new: fresh });
+  if (!message && !pending.length) return;
+  const images = pending.map(({ name, data }) => ({ name, data }));
+  const r = await api('POST', `/api/agents/${encodeURIComponent(agentId)}/chat`, { message, new: fresh, ...(images.length ? { images } : {}) });
   $('msg').value = '';
+  clearPending();
   if (r.guard && !r.guard.ok) toast(`Started, but a scheduled run would be held back: ${r.guard.reason}.`, 'warn');
   await load();
 }
 async function saveEdit() {
   const message = $('msg').value.trim();
-  if (!message) return;
+  if (!message && !editItem()?.attachments.length) return;
   try {
     await api('POST', `/api/runs/${editRunId}/edit`, { message });
     leaveEdit(false);
@@ -328,18 +452,48 @@ $('msg').onkeydown = e => {
   else if (e.key === 'Escape' && editRunId) { e.stopPropagation(); leaveEdit(false); renderThread(); renderComposer(); } // must not close the embedded chat
 };
 $('thread').onclick = e => {
+  const z = e.target.closest('[data-zoom]');
+  if (z) { zoom(z.dataset.zoom); return; }
   const b = e.target.closest('[data-edit]');
   if (!b) return;
   const item = thread.find(t => t.run.id === Number(b.dataset.edit));
   if (!item?.editable) return;
   editRunId = item.run.id;
-  $('msg').value = item.run.prompt;
+  $('msg').value = item.attachments.length && item.run.prompt === IMAGE_ONLY_TEXT ? '' : item.run.prompt;
   renderThread(); renderComposer();
   $('msg').focus();
 };
 $('cancel').onclick = () => { leaveEdit(false); renderThread(); renderComposer(); };
+$('attach').onclick = () => $('file').click();
+$('file').onchange = () => { const files = [...$('file').files]; $('file').value = ''; act(() => addImages(files)); };
+$('thumbs').onclick = e => {
+  const b = e.target.closest('[data-rm]');
+  if (!b) return;
+  URL.revokeObjectURL(pending[Number(b.dataset.rm)].url);
+  pending.splice(Number(b.dataset.rm), 1);
+  renderThumbs();
+};
+const imageFiles = dt => [...(dt?.files ?? [])].filter(f => f.type.startsWith('image/'));
+const canAttach = () => !$('attach').disabled;
+$('msg').addEventListener('paste', e => {
+  const files = imageFiles(e.clipboardData);
+  if (!files.length) return; // plain text pastes as usual
+  e.preventDefault();
+  if (!canAttach()) { toast('Images cannot be added right now.', 'warn'); return; }
+  act(() => addImages(files));
+});
+$('composer').addEventListener('dragover', e => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); $('composer').classList.add('filedrop'); } });
+$('composer').addEventListener('dragleave', e => { if (!$('composer').contains(e.relatedTarget)) $('composer').classList.remove('filedrop'); });
+$('composer').addEventListener('drop', e => {
+  if (!e.dataTransfer?.types.includes('Files')) return;
+  e.preventDefault(); $('composer').classList.remove('filedrop');
+  const files = imageFiles(e.dataTransfer);
+  if (!files.length) toast('Only images can be dropped here.', 'warn');
+  else if (!canAttach()) toast('Images cannot be added right now.', 'warn');
+  else act(() => addImages(files));
+});
 $('fresh').onclick = () => act(async () => {
-  if (!$('msg').value.trim()) { toast('Type the first message of the new chat, then press New chat.', 'warn'); return; }
+  if (!$('msg').value.trim() && !pending.length) { toast('Type the first message of the new chat, then press New chat.', 'warn'); return; }
   await send(true);
 });
 $('stop').onclick = () => act(() => api('POST', `/api/runs/${activeRun().id}/stop`, {}));

@@ -12,6 +12,7 @@ import { PERMISSION_MODES } from './adapters/claude.js';
 import { CODEX_MODES, WITHDRAWN_NOTE } from './adapters/codex.js';
 import { isAnswerEvent, isEditable, validatePins } from './chat.js';
 import { listFolder } from './browse.js';
+import { resolveShownImage, saveUploads, UPLOAD_NAME, uploadType } from './images.js';
 import { createTasks } from './tasks.js';
 import { createScheduler, validateCron } from './scheduler.js';
 import { slug } from './util.js';
@@ -25,13 +26,14 @@ const HOST = '127.0.0.1';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = process.env.AIOS_DATA ?? join(root, 'data');
 const webDir = join(root, 'web');
+const uploadsDir = join(dataDir, 'uploads');
 const hubUrl = `http://${HOST}:${PORT}`;
 const hubToken = randomBytes(24).toString('hex');
 
 const store = openStore(join(dataDir, 'aios.db'));
 const bus = createBus();
 const graphs = createGraphs({ store, bus, dataDir, graphifyDir: join(root, 'tools', 'graphify') });
-const runner = createRunner({ store, bus, graphs, hubUrl, hubToken, mcpScript: join(root, 'server', 'mcp', 'inbox-server.js'), runDir: join(dataDir, 'runs') });
+const runner = createRunner({ store, bus, graphs, hubUrl, hubToken, mcpScript: join(root, 'server', 'mcp', 'inbox-server.js'), runDir: join(dataDir, 'runs'), uploadsDir });
 const getPins = () => store.getSetting('chat_pins') ?? [];
 const getSettings = () => withDefaults(store.getSetting('app'));
 const guard = createGuard({ store, getSettings });
@@ -223,31 +225,40 @@ route('GET', '/api/agents/:id/chat', ({ params }) => {
   if (!store.getAgent(params.id)) throw new HttpError(404, 'agent not found');
   return {
     runs: chatThread(params.id).map(run => {
-      const events = store.listEvents(run.id).filter(isAnswerEvent);
-      return { run, events, editable: isEditable(run, events) };
+      const all = store.listEvents(run.id);
+      const events = all.filter(isAnswerEvent);
+      return { run, events, attachments: attachmentsOf(all), editable: isEditable(run, events) };
     }),
   };
 });
-const chatMessage = body => {
+const attachmentsOf = events => events.filter(e => e.kind === 'attachment').flatMap(e => e.data.files);
+const IMAGE_ONLY_TEXT = '(see the attached image)';
+const chatMessage = (body, hasImages = false) => {
   const message = typeof body.message === 'string' ? body.message.trim() : '';
-  if (!message || message.length > 10000) throw new HttpError(400, 'message is required (max 10000 characters)');
-  return message;
+  if (message.length > 10000 || (!message && !hasImages)) throw new HttpError(400, 'message is required (max 10000 characters)');
+  return message || IMAGE_ONLY_TEXT;
+};
+const chatImages = body => {
+  if (body.images === undefined) return [];
+  try { return saveUploads(uploadsDir, body.images); } catch (e) { throw new HttpError(400, e.message); }
 };
 route('POST', '/api/agents/:id/chat', ({ params, body }) => {
   const agent = store.getAgent(params.id);
   if (!agent) throw new HttpError(404, 'agent not found');
-  const message = chatMessage(body);
+  const message = chatMessage(body, Array.isArray(body.images) && body.images.length > 0);
   if (store.listActiveRuns().some(r => r.agent_id === agent.id)) throw new HttpError(409, 'agent already has an active run');
+  const images = chatImages(body);
   const resumeRun = body.new === true ? null : chatThread(agent.id).reverse().find(r => r.session_id) ?? null;
   const verdict = guard.check(agent); // like a manual start: never blocks, the UI just says so
-  try { return { run: runner.enqueue(agent.id, { trigger: 'chat', prompt: message, resumeRun }), guard: verdict }; }
+  try { return { run: runner.enqueue(agent.id, { trigger: 'chat', prompt: message, resumeRun, images }), guard: verdict }; }
   catch (e) { throw new HttpError(422, e.message); }
 }, 201);
 // Edit a message the agent has not answered yet: the run is cancelled and the corrected text starts a new run from the same point of the thread.
 route('POST', '/api/runs/:id/edit', async ({ params, body }) => {
   const run = store.getRun(int(params.id));
   if (!run) throw new HttpError(404, 'run not found');
-  const message = chatMessage(body);
+  const attached = attachmentsOf(store.listEvents(run.id));
+  const message = chatMessage(body, attached.length > 0);
   if (!isEditable(run, store.listEvents(run.id))) throw new HttpError(409, 'this message cannot be edited any more: the agent has answered or the run is over');
   try { await runner.stopAndWait(run.id); } catch (e) { throw new HttpError(422, e.message); }
   // the answer can start in the moment between the check and the stop
@@ -257,7 +268,7 @@ route('POST', '/api/runs/:id/edit', async ({ params, body }) => {
   const resumeRun = run.parent_run_id ? store.getRun(run.parent_run_id) : null; // the same starting point the original message had
   store.addEvent(run.id, 'warning', { message: 'message edited and sent again as a new run' });
   try {
-    return { run: runner.enqueue(agent.id, { trigger: 'chat', prompt: message, resumeRun, prefix: resumeRun && agent.type === 'codex' ? WITHDRAWN_NOTE : null }) };
+    return { run: runner.enqueue(agent.id, { trigger: 'chat', prompt: message, resumeRun, images: attached, prefix: resumeRun && agent.type === 'codex' ? WITHDRAWN_NOTE : null }) }; // the images stay with the corrected text
   } catch (e) { throw new HttpError(422, e.message); }
 }, 201);
 
@@ -383,12 +394,15 @@ const allowedOrigins = new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${
 const hostOk = req => allowedHosts.has(req.headers.host ?? '');
 const originOk = req => !req.headers.origin || allowedOrigins.has(req.headers.origin);
 
-async function readJson(req) {
+// a chat message carries up to 4 images of 5 MB each as base64
+const bodyLimit = (method, pathname) => (method === 'POST' && /^\/api\/agents\/[^/]+\/chat$/.test(pathname) ? 30_000_000 : 1_000_000);
+
+async function readJson(req, limit) {
   const chunks = [];
   let size = 0;
   for await (const c of req) {
     size += c.length;
-    if (size > 1_000_000) throw new HttpError(413, 'body too large');
+    if (size > limit) throw new HttpError(413, 'body too large');
     chunks.push(c);
   }
   if (!size) return {};
@@ -410,6 +424,26 @@ async function serveStatic(req, res, pathname) {
   }
 }
 
+// Image files for the chat: what a user attached (/api/uploads/<name>) and what an agent mentioned (/api/image?agent=<id>&path=<path>, relative paths are relative to the agent's folder).
+async function serveImage(req, res, url) {
+  let file, type, size, mtimeMs;
+  const upload = /^\/api\/uploads\/([^/]+)$/.exec(url.pathname)?.[1];
+  if (upload) {
+    if (!UPLOAD_NAME.test(upload)) throw new HttpError(404, 'not found');
+    file = join(uploadsDir, upload); type = uploadType(upload);
+    try { ({ size, mtimeMs } = statSync(file)); } catch { throw new HttpError(404, 'not found'); }
+  } else {
+    const agent = store.getAgent(url.searchParams.get('agent') ?? '');
+    if (!agent) throw new HttpError(404, 'agent not found');
+    try { ({ file, type, size, mtimeMs } = resolveShownImage(url.searchParams.get('path'), agent.cwd)); }
+    catch (e) { throw new HttpError(e.code === 'ENOENT' || e.code === 'ENOTDIR' ? 404 : 400, e.code ? 'not found' : e.message); }
+  }
+  const etag = `W/"${size}-${Math.floor(mtimeMs)}"`; // an agent may overwrite the same screenshot path
+  const headers = { 'content-type': type, etag, 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' };
+  if (req.headers['if-none-match'] === etag) return res.writeHead(304, headers).end();
+  res.writeHead(200, headers).end(await readFile(file));
+}
+
 const send = (res, status, data) => res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(data));
 
 const server = http.createServer(async (req, res) => {
@@ -420,12 +454,13 @@ const server = http.createServer(async (req, res) => {
       if (req.method !== 'GET') throw new HttpError(405, 'method not allowed');
       return await serveStatic(req, res, pathname);
     }
+    if (req.method === 'GET' && (pathname === '/api/image' || pathname.startsWith('/api/uploads/'))) return await serveImage(req, res, new URL(req.url, hubUrl));
     if (req.method !== 'GET' && !originOk(req)) throw new HttpError(403, 'bad origin');
     for (const r of routes) {
       if (r.method !== req.method) continue;
       const m = r.re.exec(pathname);
       if (!m) continue;
-      const body = req.method === 'GET' ? {} : await readJson(req);
+      const body = req.method === 'GET' ? {} : await readJson(req, bodyLimit(req.method, pathname));
       return send(res, r.status, await r.handler({ req, params: m.groups ?? {}, body }));
     }
     throw new HttpError(404, 'no such endpoint');

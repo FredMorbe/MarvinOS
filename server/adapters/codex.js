@@ -42,7 +42,7 @@ export function findCodex(env = process.env) {
 export const WITHDRAWN_NOTE = '[macii] The user withdrew their previous message before you answered it. Ignore it completely; it was never sent. Their message now is:\n\n';
 
 /** arguments for `codex exec` (or `exec resume`); the prompt goes in on stdin, so it is not limited by the Windows command line length */
-export function buildCodexArgs({ agent, resumeSessionId }) {
+export function buildCodexArgs({ agent, resumeSessionId, images = [] }) {
   const sandbox = CODEX_MODES[agent.mode ?? 'manual'];
   if (!sandbox) throw new Error(`permission mode "${agent.mode}" is not available for Codex agents`);
   const args = ['exec'];
@@ -53,6 +53,7 @@ export function buildCodexArgs({ agent, resumeSessionId }) {
   args.push('--json', '--skip-git-repo-check', '--ignore-user-config', '-c', `sandbox_mode=${JSON.stringify(sandbox)}`, '-c', 'approval_policy="never"');
   if (process.platform === 'win32') args.push('-c', 'windows.sandbox="elevated"'); // the sandbox the Codex app sets up; without it a run waits forever
   if (agent.model) args.push('-m', agent.model);
+  for (const file of images) args.push('--image', file); // one flag per file: the option is variadic and would swallow the arguments after it
   const role = agent.mode === 'plan'
     ? [agent.role, 'You are in plan mode: only read and analyse. Do not change anything. Answer with a plan.'].filter(Boolean).join('\n\n')
     : agent.role;

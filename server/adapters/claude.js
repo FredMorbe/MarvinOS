@@ -16,6 +16,7 @@ export const SYSTEM_APPEND = [
 // Chat runs: the user is reading along, so the answer goes straight into the reply instead of the inbox.
 export const CHAT_APPEND = [
   'You are in a live chat inside macii, a hub for agents. The user reads your replies directly: answer in plain text, ask questions in plain text.',
+  'To show the user an image (a screenshot, a chart), save it as a file and write its absolute path in your reply: macii displays image files inline. Images the user sends are part of their message.',
   `Use the tool ${INBOX_TOOL} only for type "approval": before an action you are not allowed to perform, describe it and list the narrowest tool permission patterns it needs in permissions (for example "Write" or "Bash(npm install zod)"), then end your turn. Only those patterns are granted if the user approves.`,
 ].join('\n');
 
@@ -29,7 +30,7 @@ export const MEMORY_APPEND = [
 /** macii permission mode -> `claude --permission-mode`. Headless runs cannot answer a prompt, so "manual" is dontAsk: what is not allowed is denied and the agent asks in the inbox. */
 export const PERMISSION_MODES = { manual: 'dontAsk', acceptEdits: 'acceptEdits', plan: 'plan', auto: 'auto' };
 
-export function buildClaudeArgs({ agent, allowedTools, memory = false, chat = false, resumeSessionId, fork = false, mcpConfigFile }) {
+export function buildClaudeArgs({ agent, allowedTools, memory = false, chat = false, resumeSessionId, fork = false, mcpConfigFile, streamInput = false }) {
   const cliMode = PERMISSION_MODES[agent.mode ?? 'manual'];
   if (!cliMode) throw new Error(`unknown permission mode "${agent.mode}"`);
   const base = chat ? CHAT_APPEND : SYSTEM_APPEND;
@@ -43,6 +44,7 @@ export function buildClaudeArgs({ agent, allowedTools, memory = false, chat = fa
     '--mcp-config', mcpConfigFile,
     '--append-system-prompt', memory ? `${system}\n${MEMORY_APPEND}` : system,
   ];
+  if (streamInput) args.push('--input-format', 'stream-json'); // the only way to hand the CLI an image: the prompt becomes one JSON message on stdin
   if (cliMode !== 'dontAsk') args.push('--permission-prompts', 'none'); // anything that would still prompt is denied instead of waiting for nobody
   if (agent.model) args.push('--model', agent.model);
   if (agent.effort) args.push('--effort', agent.effort);
@@ -52,6 +54,12 @@ export function buildClaudeArgs({ agent, allowedTools, memory = false, chat = fa
   // variadic flag: keep it last
   args.push('--allowedTools', [INBOX_TOOL, ...allowedTools].join(','));
   return args;
+}
+
+/** stdin for `--input-format stream-json`: one user message with the images (`{ type, data: base64 }`) in front of the text */
+export function buildClaudeInput(text, images) {
+  const content = [...images.map(({ type, data }) => ({ type: 'image', source: { type: 'base64', media_type: type, data } })), { type: 'text', text }];
+  return JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n';
 }
 
 const SUBAGENT_TOOLS = new Set(['Task', 'Agent']);
