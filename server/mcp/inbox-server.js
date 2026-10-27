@@ -12,7 +12,7 @@ for (const [k, v] of Object.entries({ AIOS_HUB_URL, AIOS_HUB_TOKEN, AIOS_RUN_ID 
 const server = new McpServer({ name: 'aios', version: '0.1.0' });
 
 server.registerTool('inbox_send', {
-  description: 'Send a message to the user\'s AIOS inbox. Use type "result" when done, "question" when you need a decision, "approval" before an action you may not perform, "warning" for non-fatal problems. After a question or approval, stop.',
+  description: 'Send a message to the user\'s macii inbox. Use type "result" when done, "question" when you need a decision, "approval" before an action you may not perform, "warning" for non-fatal problems. After a question or approval, stop.',
   inputSchema: {
     type: z.enum(['result', 'question', 'approval', 'warning']),
     title: z.string().min(1).max(120).describe('One line'),
@@ -27,7 +27,7 @@ server.registerTool('inbox_send', {
     body: JSON.stringify({ ...args, run_id: Number(AIOS_RUN_ID) }),
   });
   const text = await res.text();
-  if (!res.ok) return { isError: true, content: [{ type: 'text', text: `AIOS hub rejected the message (${res.status}): ${text}` }] };
+  if (!res.ok) return { isError: true, content: [{ type: 'text', text: `macii hub rejected the message (${res.status}): ${text}` }] };
   return { content: [{ type: 'text', text: `Delivered to inbox (${args.type}).` }] };
 });
 

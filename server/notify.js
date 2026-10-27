@@ -43,7 +43,7 @@ export function createNotifier({ store, bus, hubUrl, getSettings, scriptPath, pl
     draining = true;
     while (queue.length) {
       const payload = queue.length > MAX_QUEUE
-        ? (() => { const n = queue.length; queue = []; return { title: 'AIOS', body: `${n} new notifications`, url: `${hubUrl}/inbox.html`, silent: false }; })()
+        ? (() => { const n = queue.length; queue = []; return { title: 'macii', body: `${n} new notifications`, url: `${hubUrl}/inbox.html`, silent: false }; })()
         : queue.shift();
       try { await show(payload); lastError = null; } catch (e) {
         lastError = e.message;
@@ -72,7 +72,7 @@ export function createNotifier({ store, bus, hubUrl, getSettings, scriptPath, pl
     /** sends a test toast and reports failure to the caller instead of swallowing it */
     async test() {
       if (!supported) throw new Error('Windows toasts are only available on Windows');
-      await show({ title: 'AIOS', body: 'Notifications work.', url: `${hubUrl}/`, silent: false });
+      await show({ title: 'macii', body: 'Notifications work.', url: `${hubUrl}/`, silent: false });
     },
   };
 }

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 
-/** AIOS permission mode -> Codex sandbox. Codex has no "plan" mode and no auto mode that survives `exec resume`, so those are not offered. */
+/** macii permission mode -> Codex sandbox. Codex has no "plan" mode and no auto mode that survives `exec resume`, so those are not offered. */
 export const CODEX_MODES = { manual: 'read-only', plan: 'read-only', acceptEdits: 'workspace-write' };
 
 const versionOf = name => name.split('_')[1]?.split('.').map(Number) ?? [];
@@ -39,7 +39,7 @@ export function findCodex(env = process.env) {
  * `codex exec resume` continues the thread in place and `exec` has no fork, so an edited message cannot be taken back out of the thread
  * (if the cancelled run had already recorded it). The replacement tells the model to disregard it.
  */
-export const WITHDRAWN_NOTE = '[AIOS] The user withdrew their previous message before you answered it. Ignore it completely; it was never sent. Their message now is:\n\n';
+export const WITHDRAWN_NOTE = '[macii] The user withdrew their previous message before you answered it. Ignore it completely; it was never sent. Their message now is:\n\n';
 
 /** arguments for `codex exec` (or `exec resume`); the prompt goes in on stdin, so it is not limited by the Windows command line length */
 export function buildCodexArgs({ agent, resumeSessionId }) {

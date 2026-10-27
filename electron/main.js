@@ -54,7 +54,7 @@ function stopHub() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 900, minHeight: 600,
-    backgroundColor: '#070d16', autoHideMenuBar: true, title: 'AIOS',
+    backgroundColor: '#070d16', autoHideMenuBar: true, title: 'macii', icon: join(root, 'web', 'logo.png'),
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   win.setMenuBarVisibility(false);
@@ -80,7 +80,7 @@ if (!app.requestSingleInstanceLock()) {
       if (!(await hubReachable())) await startHub(); // otherwise attach to an already running hub (start.cmd / npm start)
       createWindow();
     } catch (e) {
-      dialog.showErrorBox('AIOS hub could not start', e.message);
+      dialog.showErrorBox('macii hub could not start', e.message);
       app.quit();
     }
   });

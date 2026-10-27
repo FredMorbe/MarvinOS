@@ -452,7 +452,7 @@ bus.onPush(msg => {
   if (msg.type === 'run') broadcast({ type: 'agents', data: agentsView() }); // last_run / next_run changed
 });
 
-server.listen(PORT, HOST, () => console.log(`AIOS hub on ${hubUrl}`));
+server.listen(PORT, HOST, () => console.log(`macii hub on ${hubUrl}`));
 
 function shutdown() {
   console.log('shutting down, stopping runs');

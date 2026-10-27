@@ -1,4 +1,4 @@
-/* AIOS HUD — shared design tokens and components (mockup) */
+/* macii HUD — shared design tokens and components (mockup) */
 /* Themes (themes.css) override the "theme inputs" block only. Names keep their original role:
    --cyan = primary accent, --red = question/alarm, --gold = approval/warning. */
 :root {
@@ -78,7 +78,7 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(var(--glass-2), transparent);
 }
 .brand { display: flex; align-items: center; gap: var(--sp-3); font: 700 var(--fs-5)/1 var(--f-head); letter-spacing: .32em; }
-.brand svg { width: 28px; height: 28px; color: var(--cyan); }
+.brand img { height: 32px; width: auto; flex: none; }
 .tabs { display: flex; gap: var(--sp-1); }
 .tabs a {
   font: 600 var(--fs-3)/1 var(--f-head); letter-spacing: .16em; text-transform: uppercase; color: var(--sec);

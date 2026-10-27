@@ -1,4 +1,4 @@
-/* AIOS HUD — memory graph (Graphify view from /api/graphs/:id) + agent orbit visualisation.
+/* macii HUD — memory graph (Graphify view from /api/graphs/:id) + agent orbit visualisation.
    opts.demo: generate seeded sample data instead (design mockups only). */
 (function () {
   const TAU = Math.PI * 2;
@@ -189,7 +189,7 @@
       ctx.strokeStyle = col.cyan(0.9); ctx.lineWidth = 1.5;
       ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + t * 0.0003; const X = cx + Math.cos(a) * B * 0.075, Y = cy + Math.sin(a) * B * 0.075; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); } ctx.closePath(); ctx.stroke();
       ctx.lineWidth = 1; ctx.fillStyle = col.cyan(1); ctx.textAlign = 'center';
-      ctx.font = '700 15px ' + th.head; ctx.fillText('AIOS', cx, cy + 3);
+      ctx.font = '700 15px ' + th.head; ctx.fillText('macii', cx, cy + 3);
       ctx.font = '400 8px ' + th.mono; ctx.fillStyle = col.cyan(0.6); ctx.fillText('CORE ONLINE', cx, cy + 15);
       ctx.textAlign = 'left';
     }

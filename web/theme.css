@@ -35,7 +35,6 @@
 /* .v6-nav.scrolled + .v6-brand + .v6-nav-links */
 :root .top { background: rgba(7, 13, 22, .72); backdrop-filter: blur(14px); }
 :root .brand { font: 700 20px/1 var(--f-head); letter-spacing: .01em; }
-:root .brand::after { content: '.'; color: #ff7847; margin-left: -8px; }
 :root .tabs a { font: 400 12px/1 var(--f-mono); letter-spacing: .14em; border-bottom: 0; transition: color .25s ease; }
 :root .tabs a:hover { color: #67e8f9; background: none; }
 :root .tabs a.on { color: var(--cyan); }

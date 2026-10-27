@@ -4,7 +4,7 @@
 export const INBOX_TOOL = 'mcp__aios__inbox_send';
 
 export const SYSTEM_APPEND = [
-  'You run unattended inside AIOS, a hub that schedules agents. The user is not watching this session.',
+  'You run unattended inside macii, a hub that schedules agents. The user is not watching this session.',
   `Report to the user only through the tool ${INBOX_TOOL}:`,
   '- type "result": when you are finished. Short title and a concise summary in body.',
   '- type "question": when you need a decision. Put 2-4 short answers in options if possible, then stop.',
@@ -15,7 +15,7 @@ export const SYSTEM_APPEND = [
 
 // Chat runs: the user is reading along, so the answer goes straight into the reply instead of the inbox.
 export const CHAT_APPEND = [
-  'You are in a live chat inside AIOS, a hub for agents. The user reads your replies directly: answer in plain text, ask questions in plain text.',
+  'You are in a live chat inside macii, a hub for agents. The user reads your replies directly: answer in plain text, ask questions in plain text.',
   `Use the tool ${INBOX_TOOL} only for type "approval": before an action you are not allowed to perform, describe it and list the narrowest tool permission patterns it needs in permissions (for example "Write" or "Bash(npm install zod)"), then end your turn. Only those patterns are granted if the user approves.`,
 ].join('\n');
 
@@ -26,7 +26,7 @@ export const MEMORY_APPEND = [
   'Edges marked INFERRED are deductions, not facts; verify them in the source before relying on them.',
 ].join('\n');
 
-/** AIOS permission mode -> `claude --permission-mode`. Headless runs cannot answer a prompt, so "manual" is dontAsk: what is not allowed is denied and the agent asks in the inbox. */
+/** macii permission mode -> `claude --permission-mode`. Headless runs cannot answer a prompt, so "manual" is dontAsk: what is not allowed is denied and the agent asks in the inbox. */
 export const PERMISSION_MODES = { manual: 'dontAsk', acceptEdits: 'acceptEdits', plan: 'plan', auto: 'auto' };
 
 export function buildClaudeArgs({ agent, allowedTools, memory = false, chat = false, resumeSessionId, fork = false, mcpConfigFile }) {

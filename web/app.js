@@ -228,9 +228,10 @@ const meter = (label, u, t) => {
 };
 
 export function mountShell(active) {
+  if (!document.querySelector('link[rel=icon]')) document.head.insertAdjacentHTML('beforeend', '<link rel="icon" type="image/png" href="/logo.png">');
   const top = document.getElementById('top');
   top.className = 'top';
-  top.innerHTML = `<a class="brand" href="/" aria-label="AIOS home"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="13" stroke-dasharray="3 3"/><circle cx="16" cy="16" r="8"/><path d="M16 3v5M16 24v5M3 16h5M24 16h5"/></svg>AIOS</a>
+  top.innerHTML = `<a class="brand" href="/" aria-label="macii home"><img src="/logo-h.png" alt="macii"></a>
     <nav class="tabs">${TABS.map(([id, label, href]) => `<a href="${href}" ${id === active ? 'class="on"' : ''}>${label}${id === 'inbox' ? ' <b class="badge red" id="badge" hidden></b>' : ''}</a>`).join('')}</nav>
     <div class="limits" id="limits"></div>
     <div class="clock"><span id="clock"></span><span id="conn"></span></div>`;
